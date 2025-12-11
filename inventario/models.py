@@ -1,5 +1,7 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.conf import settings
 
 class Sede(models.Model):
     nombre = models.CharField(max_length=100)
@@ -103,4 +105,86 @@ class RecetaAncheta(models.Model):
 
     def save(self, *args, **kwargs):
         self.full_clean()
+        super().save(*args, **kwargs)
+
+class MovimientoInventario(models.Model):
+    TIPOS = (
+        ('ENTRADA', 'Entrada / Compra'), # Suma stock
+        ('SALIDA', 'Salida / Ajuste / Pérdida'), # Resta stock (ej. robo, daño)
+        ('TRASLADO', 'Traslado entre Sedes'), # Resta de Origen, Suma en Destino
+    )
+
+    fecha = models.DateTimeField(auto_now_add=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT)
+    tipo = models.CharField(max_length=10, choices=TIPOS)
+    cantidad = models.PositiveIntegerField()
+    
+    # Origen y Destino
+    sede_origen = models.ForeignKey(Sede, on_delete=models.PROTECT, related_name='movimientos_salida')
+    sede_destino = models.ForeignKey(Sede, on_delete=models.PROTECT, related_name='movimientos_entrada', null=True, blank=True)
+    
+    motivo = models.CharField(max_length=200, help_text="Ej: Factura de compra #123, Traslado por falta de stock, etc.")
+
+    def __str__(self):
+        return f"{self.tipo} - {self.producto.nombre} ({self.cantidad})"
+
+    def clean(self):
+        if self.tipo == 'TRASLADO' and not self.sede_destino:
+            raise ValidationError("Para un TRASLADO debes especificar la Sede Destino.")
+        if self.tipo == 'TRASLADO' and self.sede_origen == self.sede_destino:
+            raise ValidationError("La sede de origen y destino no pueden ser la misma.")
+        
+        # Solo validamos si es SALIDA o TRASLADO (que son los que restan)
+        if self.tipo in ['SALIDA', 'TRASLADO']:
+            # Buscamos si existe inventario en el origen
+            inventario_origen = Inventario.objects.filter(
+                producto=self.producto, 
+                sede=self.sede_origen
+            ).first()
+
+            # No existe el registro de inventario siquiera
+            if not inventario_origen:
+                raise ValidationError(f"No existe inventario de {self.producto.nombre} en la sede {self.sede_origen}.")
+
+            # Existe, pero no alcanza
+            if inventario_origen.stock_actual < self.cantidad:
+                raise ValidationError(
+                    f"No hay suficiente stock en {self.sede_origen}. "
+                    f"Tienes {inventario_origen.stock_actual}, intentas mover {self.cantidad}."
+                )
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        # Ejecutamos clean() para asegurar que incluso por código se validen las reglas
+        self.full_clean() 
+
+        # Si es un registro nuevo, aplicamos los cambios matemáticos
+        if not self.pk: 
+            # Obtenemos origen (Ya sabemos que existe y alcanza por el clean)
+            inv_origen = Inventario.objects.get(producto=self.producto, sede=self.sede_origen)
+
+            if self.tipo == 'ENTRADA':
+                inv_origen.stock_actual += self.cantidad
+                inv_origen.save()
+
+            elif self.tipo == 'SALIDA':
+                # Ya validamos stock en clean(), aquí solo restamos
+                inv_origen.stock_actual -= self.cantidad
+                inv_origen.save()
+
+            elif self.tipo == 'TRASLADO':
+                # Restar de Origen
+                inv_origen.stock_actual -= self.cantidad
+                inv_origen.save()
+
+                # Usamos get_or_create por si en el destino nunca ha habido ese producto
+                inv_destino, _ = Inventario.objects.get_or_create(
+                    producto=self.producto, 
+                    sede=self.sede_destino,
+                    defaults={'stock_actual': 0}
+                )
+                inv_destino.stock_actual += self.cantidad
+                inv_destino.save()
+
         super().save(*args, **kwargs)

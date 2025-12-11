@@ -4,22 +4,21 @@ from django.utils import timezone
 from inventario.models import Producto, Sede # Importamos lo que ya hiciste
 
 class SesionCaja(models.Model):
-    """
-    Representa un turno de trabajo. Un empleado abre caja y la cierra.
-    """
+    """ Representa un turno de trabajo. Un empleado abre caja y la cierra. """
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     sede = models.ForeignKey(Sede, on_delete=models.PROTECT)
     
     fecha_apertura = models.DateTimeField(auto_now_add=True)
     fecha_cierre = models.DateTimeField(null=True, blank=True)
     
-    monto_base = models.DecimalField(max_digits=10, decimal_places=2, help_text="Dinero con el que inicia la caja")
+    monto_base = models.DecimalField(max_digits=10, decimal_places=2, help_text = "Dinero con el que inicia la caja")
     
     # Estos campos se llenan al cerrar
     total_ventas_sistema = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Calculado por el sistema")
     dinero_fisico_declarado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Lo que el cajero cuenta manualmente")
     diferencia = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Faltante o Sobrante")
     
+    # se desactiva al cerrar la caja
     activa = models.BooleanField(default=True)
 
     def __str__(self):

@@ -1,0 +1,117 @@
+from rest_framework import serializers
+from django.db import transaction, models
+from django.utils import timezone
+from .models import Venta, DetalleVenta, SesionCaja
+from inventario.models import Producto, Inventario
+
+class DetalleVentaInputSerializer(serializers.Serializer):
+    """Estructura simple para recibir los datos de cada item"""
+    producto_id = serializers.IntegerField()
+    cantidad = serializers.IntegerField(min_value=1)
+
+class CrearVentaSerializer(serializers.ModelSerializer):
+    detalles = DetalleVentaInputSerializer(many=True)
+
+    class Meta:
+        model = Venta
+        fields = ['sesion_caja', 'metodo_pago', 'cliente_nombre', 'detalles']
+
+    def validate_sesion_caja(self, value):
+        """Validar que la caja exista y esté abierta"""
+        if not value.activa:
+            raise serializers.ValidationError("Esta caja ya está cerrada. No se puede vender.")
+        return value
+
+    def create(self, validated_data):
+        detalles_data = validated_data.pop('detalles')
+        sesion = validated_data['sesion_caja']
+        sede_actual = sesion.sede # Obtenemos la sede de la caja actual
+
+        # Usamos atomic para asegurar consistencia total
+        with transaction.atomic():
+            # 1. Crear la Venta (Cabecera)
+            venta = Venta.objects.create(**validated_data)
+            total_acumulado = 0
+
+            # 2. Procesar cada producto
+            for item in detalles_data:
+                producto = Producto.objects.get(id=item['producto_id'])
+                cantidad = item['cantidad']
+                precio_actual = producto.precio_venta 
+
+                # A. Validar y Descontar Stock (Lógica Crítica)
+                if producto.tipo == 'FISICO' or producto.tipo == 'ANCHETA':
+                    try:
+                        # Bloqueamos la fila (select_for_update) para evitar condiciones de carrera
+                        inventario = Inventario.objects.select_for_update().get(
+                            producto=producto, 
+                            sede=sede_actual
+                        )
+                    except Inventario.DoesNotExist:
+                        raise serializers.ValidationError(f"El producto {producto.nombre} no tiene inventario creado en esta sede.")
+
+                    if inventario.stock_actual < cantidad:
+                        raise serializers.ValidationError(
+                            f"Stock insuficiente para {producto.nombre}. Tienes {inventario.stock_actual}, intentas vender {cantidad}."
+                        )
+                    
+                    inventario.stock_actual -= cantidad
+                    inventario.save()
+
+                # B. Crear Detalle
+                DetalleVenta.objects.create(
+                    venta=venta,
+                    producto=producto,
+                    cantidad=cantidad,
+                    precio_unitario=precio_actual,
+                    subtotal=cantidad * precio_actual
+                )
+                
+                total_acumulado += (cantidad * precio_actual)
+
+            # 3. Actualizar total de la venta
+            venta.total = total_acumulado
+            venta.save()
+            
+            # 4. Actualizar acumulado en la sesión de caja
+            sesion.total_ventas_sistema += total_acumulado
+            sesion.save()
+
+        return venta
+
+class CerrarCajaSerializer(serializers.ModelSerializer):
+    # El usuario solo envía cuánto dinero contó billete tras billete
+    dinero_fisico_declarado = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        model = SesionCaja
+        fields = ['dinero_fisico_declarado']
+
+    def update(self, instance, validated_data):
+        """
+        Lógica del Arqueo: Comparar Realidad vs Sistema
+        """
+        dinero_fisico = validated_data['dinero_fisico_declarado']
+        
+        # 1. Calcular cuánto debería haber (Base + Ventas en Efectivo)
+        # Nota: Solo sumamos efectivo. Las transferencias no suman al cajón de monedas.
+        ventas_efectivo = instance.ventas.filter(metodo_pago='EFECTIVO').aggregate(
+            total=models.Sum('total')
+        )['total'] or 0
+        
+        total_esperado = instance.monto_base + ventas_efectivo
+
+        # 2. Calcular la diferencia
+        # Negativo = Falta dinero (Robo o error)
+        # Positivo = Sobra dinero
+        diferencia = dinero_fisico - total_esperado
+
+        # 3. Guardar datos y cerrar
+        instance.dinero_fisico_declarado = dinero_fisico
+        instance.total_ventas_sistema = ventas_efectivo # Guardamos cuánto se vendió en efectivo
+        instance.diferencia = diferencia
+        instance.fecha_cierre = timezone.now()
+        instance.activa = False # ¡Caja Cerrada!
+        instance.save()
+
+        return instance

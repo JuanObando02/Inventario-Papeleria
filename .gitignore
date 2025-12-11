@@ -1,0 +1,37 @@
+# --- Python & Bytecode (Archivos compilados que no sirven a otros) ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Entorno Virtual (¡MUY IMPORTANTE!) ---
+# Nunca subas esto, pesa mucho y cada quien crea el suyo
+venv/
+env/
+.venv/
+
+# --- Base de Datos Local ---
+# Si trabajas en equipo, subir esto causa conflictos constantes.
+# Es mejor que cada quien tenga su db.sqlite3 local.
+db.sqlite3
+db.sqlite3-journal
+
+# --- Variables de Entorno y Secretos (SEGURIDAD) ---
+# Aquí van contraseñas, API Keys, SECRET_KEY de Django
+.env
+.env.local
+
+# --- Django ---
+# Archivos estáticos recolectados (se generan solos con collectstatic)
+staticfiles/
+# Archivos subidos por usuarios (imágenes de productos)
+media/
+*.log
+
+# --- IDEs y Editores (Configuraciones personales tuyas) ---
+.vscode/
+.idea/
+*.swp
+
+# --- Sistema Operativo ---
+Thumbs.db
+.DS_Store

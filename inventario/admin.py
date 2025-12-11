@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Sede, Categoria, Producto, RecetaAncheta, Inventario
+from .models import Sede, Categoria, Producto, RecetaAncheta, Inventario, MovimientoInventario
 
 @admin.register(Sede)
 class SedeAdmin(admin.ModelAdmin):
@@ -32,3 +32,21 @@ class ProductoAdmin(admin.ModelAdmin):
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
     list_display = ('nombre',)
+
+@admin.register(MovimientoInventario)
+class MovimientoInventarioAdmin(admin.ModelAdmin):
+    list_display = ('fecha', 'tipo', 'producto', 'cantidad', 'sede_origen', 'sede_destino', 'usuario')
+    list_filter = ('tipo', 'fecha', 'sede_origen')
+    search_fields = ('producto__nombre', 'motivo')
+    autocomplete_fields = ['producto'] # Para buscar rápido si tienes muchos productos
+
+    # Importante: Como el save() altera el stock, es mejor no dejar editar movimientos pasados
+    # para no descuadrar el inventario histórico.
+    def has_change_permission(self, request, obj=None):
+        return False
+    
+    # Pre-llenar el usuario logueado automáticamente
+    def save_model(self, request, obj, form, change):
+        if not obj.usuario_id:
+            obj.usuario = request.user
+        super().save_model(request, obj, form, change)
