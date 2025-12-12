@@ -3,6 +3,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from .serializers import CrearVentaSerializer, CerrarCajaSerializer
 from .models import SesionCaja
+from django.contrib.auth.decorators import login_required
 
 class ProcesarVentaView(generics.CreateAPIView):
     serializer_class = CrearVentaSerializer
@@ -61,3 +62,20 @@ class CerrarCajaView(generics.UpdateAPIView):
             "diferencia": diferencia,
             "total_vendido_efectivo": instance.total_ventas_sistema
         }, status=status.HTTP_200_OK)
+        
+@login_required
+def punto_venta_view(request):
+    """
+    Vista que renderiza el HTML del Punto de Venta.
+    """
+    # Buscamos si el usuario tiene una caja abierta HOY
+    caja_abierta = SesionCaja.objects.filter(
+        usuario=request.user, 
+        activa=True
+    ).first()
+
+    context = {
+        'caja': caja_abierta,
+    }
+    # Renderiza el archivo pos.html que creamos antes
+    return render(request, 'ventas/pos.html', context)

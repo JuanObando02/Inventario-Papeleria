@@ -54,10 +54,6 @@ class Producto(models.Model):
         # Validación 1: Precio Venta vs Costo
         if self.precio_venta < self.precio_costo:
             raise ValidationError("El precio de venta no puede ser menor al costo.")
-        
-        # Validación 2: Servicios no deberían tener stock
-        if self.tipo == 'SERVICIO' and self.stock_actual > 0:
-            raise ValidationError("Un servicio no puede tener stock físico.")
 
     def save(self, *args, **kwargs):
         self.full_clean()

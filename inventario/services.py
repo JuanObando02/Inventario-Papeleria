@@ -3,9 +3,7 @@ from django.core.exceptions import ValidationError
 from .models import Inventario, RecetaAncheta
 
 def armar_ancheta(producto_ancheta, sede, cantidad_a_armar):
-    """
-    Lógica transaccional para convertir insumos en una Ancheta pre-armada.
-    """
+    """ Lógica transaccional para convertir insumos en una Ancheta pre-armada. """
     if producto_ancheta.tipo != 'ANCHETA':
         raise ValidationError("El producto seleccionado no es una Ancheta.")
 
