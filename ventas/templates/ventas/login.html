@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso al Sistema - Papelería</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f0f2f5; display: flex; align-items: center; justify-content: center; height: 100vh; }
+        .card-login { width: 100%; max-width: 400px; border: none; shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .header-login { background-color: #0d6efd; color: white; padding: 20px; border-radius: 5px 5px 0 0; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div class="card card-login">
+        <div class="header-login">
+            <h3 class="mb-0">🔐 Iniciar Sesión</h3>
+            <small>Sistema de Inventario y Ventas</small>
+        </div>
+        <div class="card-body p-4">
+            <form method="post">
+                {% csrf_token %}
+                
+                {% if form.errors %}
+                    <div class="alert alert-danger py-2">Usuario o contraseña incorrectos</div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <label class="form-label">Usuario</label>
+                    <input type="text" name="username" class="form-control" placeholder="Ej: cajero1" required autofocus>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Contraseña</label>
+                    <input type="password" name="password" class="form-control" placeholder="******" required>
+                </div>
+
+                <div class="d-grid gap-2 mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">Entrar al Sistema</button>
+                </div>
+            </form>
+        </div>
+        <div class="card-footer text-center py-3 bg-white">
+            <small class="text-muted">¿Olvidaste tu clave? Contacta al Administrador.</small>
+        </div>
+    </div>
+
+</body>
+</html>
