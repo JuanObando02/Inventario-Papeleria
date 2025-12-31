@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Sum
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.conf import settings
@@ -121,6 +122,9 @@ class MovimientoInventario(models.Model):
     sede_destino = models.ForeignKey(Sede, on_delete=models.PROTECT, related_name='movimientos_entrada', null=True, blank=True)
     
     motivo = models.CharField(max_length=200, help_text="Ej: Factura de compra #123, Traslado por falta de stock, etc.")
+    
+    # Campo para el costo histórico y cálculo de promedio ponderado
+    costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Costo al momento de la compra")
 
     def __str__(self):
         return f"{self.tipo} - {self.producto.nombre} ({self.cantidad})"
@@ -157,20 +161,54 @@ class MovimientoInventario(models.Model):
 
         # Si es un registro nuevo, aplicamos los cambios matemáticos
         if not self.pk: 
-            # Obtenemos origen (Ya sabemos que existe y alcanza por el clean)
-            inv_origen = Inventario.objects.get(producto=self.producto, sede=self.sede_origen)
-
+            
             if self.tipo == 'ENTRADA':
+                # Para entradas, aseguramos que exista el registro de inventario
+                inv_origen, created = Inventario.objects.get_or_create(
+                    producto=self.producto, 
+                    sede=self.sede_origen,
+                    defaults={'stock_actual': 0}
+                )
+                
+                # -----------------------------------------------------------
+                # CÁLCULO DE PROMEDIO PONDERADO (Weighted Average Cost)
+                # -----------------------------------------------------------
+                if self.costo_unitario is not None:
+                    # 1. Obtenemos el Stock Total Global ACTUAL (antes de sumar lo nuevo)
+                    total_stock_actual = Inventario.objects.filter(producto=self.producto).aggregate(t=Sum('stock_actual'))['t'] or 0
+                    
+                    # 2. Precio de Costo Actual del Producto
+                    costo_actual = self.producto.precio_costo
+                    
+                    # 3. Fórmula: ((StockViejo * CostoViejo) + (CantNueva * CostoNuevo)) / (StockViejo + CantNueva)
+                    # Usamos decimales para precisión
+                    numerador = (total_stock_actual * costo_actual) + (self.cantidad * self.costo_unitario)
+                    denominador = total_stock_actual + self.cantidad
+                    
+                    if denominador > 0:
+                        nuevo_costo_promedio = numerador / denominador
+                        
+                        # REDONDEO para evitar error de max_digits (ej. 133.33333333...)
+                        # Ajustamos a 2 decimales
+                        nuevo_costo_promedio = round(nuevo_costo_promedio, 2)
+
+                        # Actualizamos el Producto con el nuevo costo promedio
+                        self.producto.precio_costo = nuevo_costo_promedio
+                        self.producto.save()
+                
+                # Finalmente sumamos el stock físico
                 inv_origen.stock_actual += self.cantidad
                 inv_origen.save()
 
             elif self.tipo == 'SALIDA':
-                # Ya validamos stock en clean(), aquí solo restamos
+                # Para salida, el inventario DEBE existir (validado en clean)
+                inv_origen = Inventario.objects.get(producto=self.producto, sede=self.sede_origen)
                 inv_origen.stock_actual -= self.cantidad
                 inv_origen.save()
 
             elif self.tipo == 'TRASLADO':
-                # Restar de Origen
+                # Para traslado, origen existe (validado en clean)
+                inv_origen = Inventario.objects.get(producto=self.producto, sede=self.sede_origen)
                 inv_origen.stock_actual -= self.cantidad
                 inv_origen.save()
 

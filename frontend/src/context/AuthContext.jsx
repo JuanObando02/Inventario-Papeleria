@@ -26,7 +26,7 @@ export const AuthProvider = ({ children }) => {
             });
         }
         setLoading(false);
-    }, []);
+    }, []);// almontar useEffect 
 
     // Función para Iniciar Sesión (Ahora recibe extraData con rol y sede)
     const login = (token, username, userId, extraData = {}) => {

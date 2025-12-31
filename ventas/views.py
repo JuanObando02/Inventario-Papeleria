@@ -4,7 +4,10 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
-from .serializers import CrearVentaSerializer, CerrarCajaSerializer
+from .serializers import (
+    CrearVentaSerializer, CerrarCajaSerializer, 
+    SesionReporteSerializer, SesionResumenSerializer
+)
 from .models import SesionCaja, DetalleVenta
 from inventario.models import Producto, Sede, Inventario
 from django.contrib.auth.decorators import login_required
@@ -145,87 +148,15 @@ class ProcesarVentaView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        data = request.data
-        
-        # 1. Validaciones básicas antes de abrir la transacción
-        sesion_id = data.get('sesion_caja')
-        if not sesion_id:
-            return Response({"error": "Falta el ID de la sesión de caja"}, status=400)
-
-        # 2. INICIO DE TRANSACCIÓN ATÓMICA (Todo o nada)
-        try:
-            with transaction.atomic():
-                # A. Obtener la sesión (Aquí definimos la variable 'sesion')
-                try:
-                    sesion = SesionCaja.objects.get(pk=sesion_id, usuario=request.user)
-                except SesionCaja.DoesNotExist:
-                    return Response({"error": "Caja no encontrada o no pertenece al usuario"}, status=404)
-
-                if not sesion.activa:
-                    raise Exception("Esta caja ya está cerrada. No se puede vender.")
-
-                # B. Crear la Venta (inicialmente en 0)
-                venta = Venta.objects.create(
-                    sesion_caja=sesion,
-                    total=0, 
-                    metodo_pago=data.get('metodo_pago', 'EFECTIVO')
-                )
-
-                # C. Procesar Detalles y Calcular Total (Aquí definimos 'total_calculado')
-                total_calculado = 0
-                detalles_data = data.get('detalles', [])
-
-                for item in detalles_data:
-                    producto = Producto.objects.get(pk=item['producto_id'])
-                    cantidad = int(item['cantidad'])
-
-                    # Validar Stock (Solo si no es servicio)
-                    if producto.tipo != 'SERVICIO':
-                        try:
-                            # Buscamos el inventario en la SEDE DE LA CAJA (sesion.sede)
-                            inventario_item = Inventario.objects.get(producto=producto, sede=sesion.sede)
-                        except Inventario.DoesNotExist:
-                             raise Exception(f"No existe inventario para {producto.nombre} en la sede actual.")
-
-                        if inventario_item.stock_actual < cantidad:
-                            raise Exception(f"Stock insuficiente para: {producto.nombre}. Disponible: {inventario_item.stock_actual}")
-                        
-                        # Restar Inventario
-                        inventario_item.stock_actual -= cantidad
-                        inventario_item.save()
-
-                    # Cálculos
-                    precio_final = producto.precio_venta # O aplicar descuentos aquí
-                    subtotal = precio_final * cantidad
-                    total_calculado += subtotal
-
-                    # Crear Detalle
-                    DetalleVenta.objects.create(
-                        venta=venta,
-                        producto=producto,
-                        cantidad=cantidad,
-                        subtotal=subtotal,
-                        precio_unitario=precio_final
-                    )
-
-                # D. Actualizar el total de la Venta
-                venta.total = total_calculado
-                venta.save()
-
-                # E. ACTUALIZAR TU MODELO DE CAJA
-                # Usamos el campo correcto de tu modelo: 'total_ventas_sistema'
-                sesion.total_ventas_sistema += total_calculado
-                sesion.save()
-
-                return Response({
-                    "mensaje": "Venta registrada exitosamente", 
-                    "venta_id": venta.id,
-                    "nuevo_acumulado_caja": sesion.total_ventas_sistema
-                }, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            # Si ocurre CUALQUIER error (stock, validación, base de datos), se deshace todo.
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = CrearVentaSerializer(data=request.data)
+        if serializer.is_valid():
+            venta = serializer.save()
+            return Response({
+                "mensaje": "Venta registrada exitosamente",
+                "venta_id": venta.id,
+                "nuevo_acumulado_caja": venta.sesion_caja.total_ventas_sistema
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class CerrarCajaView(generics.UpdateAPIView):
     queryset = SesionCaja.objects.all()
@@ -249,26 +180,8 @@ class CerrarCajaView(generics.UpdateAPIView):
         # 3. ¡SOLUCIÓN! Refrescar la instancia para traer los cálculos nuevos
         instance.refresh_from_db() 
         
-        # Ahora instance.diferencia ya tiene el número (ej. -5000) en lugar de None
-        diferencia = instance.diferencia
-        
-        # Lógica del mensaje
-        mensaje = "Caja cuadrada perfecta"
-        
-        # Agregamos validación extra por seguridad (si diferencia sigue siendo None, asumimos 0)
-        if diferencia is None:
-            diferencia = 0
-
-        if diferencia < 0:
-            mensaje = f"⚠️ ALERTA: Faltan ${abs(diferencia)}"
-        elif diferencia > 0:
-            mensaje = f"Sobra dinero: ${diferencia}"
-
         return Response({
-            "mensaje": "Caja cerrada correctamente",
-            "estado_arqueo": mensaje,
-            "diferencia": diferencia,
-            "total_vendido_efectivo": instance.total_ventas_sistema
+            "mensaje": "Caja cerrada correctamente. Información guardada.",
         }, status=status.HTTP_200_OK)
         
 @login_required
@@ -287,3 +200,20 @@ def punto_venta_view(request):
     }
     # Renderiza el archivo pos.html que creamos antes
     return render(request, 'ventas/pos.html', context)
+
+class AdminReportesCajaView(generics.ListAPIView):
+    """Lista las cajas cerradas para el Admin"""
+    serializer_class = SesionResumenSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Opcional: validar rol
+        if getattr(self.request.user, 'perfil', None) and self.request.user.perfil.rol == 'ADMIN':
+             return SesionCaja.objects.filter(activa=False).order_by('-fecha_cierre')
+        return SesionCaja.objects.none()
+
+class AdminDetalleCajaView(generics.RetrieveAPIView):
+    """Detalle completo de una sesión (ventas, productos, arqueo)"""
+    queryset = SesionCaja.objects.all()
+    serializer_class = SesionReporteSerializer
+    permission_classes = [IsAuthenticated]

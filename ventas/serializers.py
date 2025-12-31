@@ -115,3 +115,52 @@ class CerrarCajaSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+
+# --- SERIALIZERS PARA REPORTES ---
+class DetalleReporteSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.ReadOnlyField(source='producto.nombre')
+    
+    class Meta:
+        model = DetalleVenta
+        fields = ['producto_nombre', 'cantidad', 'precio_unitario', 'subtotal']
+
+class VentaReporteSerializer(serializers.ModelSerializer):
+    detalles = DetalleReporteSerializer(many=True, read_only=True)
+    hora = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Venta
+        fields = ['id', 'hora', 'metodo_pago', 'total', 'detalles']
+
+    def get_hora(self, obj):
+        return obj.fecha.strftime("%H:%M")
+
+class SesionReporteSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.ReadOnlyField(source='usuario.username')
+    sede_nombre = serializers.ReadOnlyField(source='sede.nombre')
+    ventas = VentaReporteSerializer(many=True, read_only=True)
+    total_esperado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SesionCaja
+        fields = [
+            'id', 'usuario_nombre', 'sede_nombre', 'fecha_apertura', 'fecha_cierre',
+            'monto_base', 'total_ventas_sistema', 'dinero_fisico_declarado', 'diferencia',
+            'activa', 'total_esperado', 'ventas'
+        ]
+
+    def get_total_esperado(self, obj):
+        if not obj.activa:
+            return (obj.monto_base or 0) + (obj.total_ventas_sistema or 0)
+        return 0
+
+class SesionResumenSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.ReadOnlyField(source='usuario.username')
+    sede_nombre = serializers.ReadOnlyField(source='sede.nombre')
+    
+    class Meta:
+        model = SesionCaja
+        fields = [
+            'id', 'usuario_nombre', 'sede_nombre', 'fecha_apertura', 'fecha_cierre',
+            'diferencia'
+        ]

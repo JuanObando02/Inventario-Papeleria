@@ -1,0 +1,287 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
+
+const InventoryMovements = () => {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+
+    // Estado del Formulario
+    const [tipo, setTipo] = useState('ENTRADA');
+    const [producto, setProducto] = useState(null); // Objeto producto seleccionado
+    const [cantidad, setCantidad] = useState('');
+    const [sedeOrigen, setSedeOrigen] = useState('');
+    const [sedeDestino, setSedeDestino] = useState('');
+    const [motivo, setMonto] = useState('');
+    // Nuevo estado para el Costo Unitario
+    const [costoUnitario, setCostoUnitario] = useState('');
+
+    // Datos Auxiliares
+    const [sedes, setSedes] = useState([]);
+    const [busqueda, setBusqueda] = useState('');
+    const [resultados, setResultados] = useState([]);
+
+    // UI Helpers
+    const [loading, setLoading] = useState(false);
+    const [mensaje, setMensaje] = useState(null);
+
+    // 1. Cargar Sedes
+    useEffect(() => {
+        if (user?.rol !== 'ADMIN') {
+            navigate('/menu');
+            return;
+        }
+        api.get('inventario/sedes/').then(res => setSedes(res.data));
+    }, [user, navigate]);
+
+    // 2. Buscador de Productos (mágia de PriceCheck)
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (busqueda.length > 2) {
+                api.get(`inventario/buscar-publico/?q=${busqueda}`)
+                    .then(res => setResultados(res.data))
+                    .catch(console.error);
+            } else {
+                setResultados([]);
+            }
+        }, 500);
+        return () => clearTimeout(timeoutId);
+    }, [busqueda]);
+
+    const seleccionarProducto = (prod) => {
+        if (prod.tipo === 'SERVICIO') {
+            alert('🚫 No puedes gestionar inventario de un SERVICIO (Copia, Impresión, etc). Los servicios no manejan stock.');
+            return;
+        }
+        setProducto(prod);
+
+        // Si es una entrada, pre-llenamos el costo con el actual
+        if (tipo === 'ENTRADA') {
+            setCostoUnitario(prod.precio_venta); // Ojo: ¿precio_venta o precio_costo? La API POS devuelve precio_venta.
+            // El endpoint 'inventario/buscar-publico/' usa ProductoPOSSerializer que NO devuelve precio_costo por seguridad?
+            // Vamos a revisar el serializer. Si no lo devuelve, tocará dejarlo vacio o pedirlo.
+            // Revisando ProductoPOSSerializer en serializers.py... solo devuelve: 'id', 'nombre', 'precio_venta', 'codigo_barras', 'codigo_interno', 'tipo', 'stock'
+            // Entonces por defecto lo dejamos vacío para que el usuario lo ingrese, o 0.
+            setCostoUnitario('');
+        }
+
+        setBusqueda('');
+        setResultados([]);
+    };
+
+    // 3. Enviar Formulario
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setMensaje(null);
+
+        if (!producto) return alert("Selecciona un producto");
+        if (!sedeOrigen) return alert("Selecciona Sede Origen o donde ocurre el movimiento");
+        if (tipo === 'TRASLADO' && !sedeDestino) return alert("Selecciona Sede Destino");
+
+        const data = {
+            tipo,
+            producto: producto.id,
+            cantidad: parseInt(cantidad),
+            sede_origen: parseInt(sedeOrigen),
+            motivo
+        };
+
+        if (tipo === 'TRASLADO') {
+            data.sede_destino = parseInt(sedeDestino);
+        }
+
+        // Si es Entrada, agregamos el costo unitario
+        if (tipo === 'ENTRADA' && costoUnitario) {
+            data.costo_unitario = parseFloat(costoUnitario);
+        }
+
+        try {
+            await api.post('inventario/movimientos/crear/', data);
+            setMensaje({ tipo: 'success', text: '✅ Movimiento registrado con éxito' });
+            // Reset parcial
+            setCantidad('');
+            setMonto('');
+            setCostoUnitario('');
+            setProducto(null);
+        } catch (error) {
+            console.error(error);
+            const errorMsg = error.response?.data?.error || "Error al procesar movimiento";
+            setMensaje({ tipo: 'danger', text: `❌ ${JSON.stringify(errorMsg)}` });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="container mt-5 mb-5">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h2>📦 Gestión de Inventario</h2>
+                <button className="btn btn-secondary" onClick={() => navigate('/menu')}>Volver al Menú</button>
+            </div>
+
+            <div className="card shadow">
+                <div className="card-header bg-primary text-white">
+                    <h5 className="mb-0">Registrar Movimiento</h5>
+                </div>
+                <div className="card-body">
+
+                    {mensaje && (
+                        <div className={`alert alert-${mensaje.tipo} alert-dismissible fade show`}>
+                            {mensaje.text}
+                            <button type="button" className="btn-close" onClick={() => setMensaje(null)}></button>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit}>
+
+                        {/* TIPO DE MOVIMIENTO */}
+                        <div className="mb-3">
+                            <label className="form-label fw-bold">Tipo de Movimiento</label>
+                            <div className="btn-group w-100" role="group">
+                                <input type="radio" className="btn-check" name="btnradio" id="btnEntrada"
+                                    autoComplete="off" checked={tipo === 'ENTRADA'} onChange={() => setTipo('ENTRADA')} />
+                                <label className="btn btn-outline-success" htmlFor="btnEntrada">📥 Entrada (Compra)</label>
+
+                                <input type="radio" className="btn-check" name="btnradio" id="btnSalida"
+                                    autoComplete="off" checked={tipo === 'SALIDA'} onChange={() => setTipo('SALIDA')} />
+                                <label className="btn btn-outline-danger" htmlFor="btnSalida">📤 Salida (Baja/Pérdida)</label>
+
+                                <input type="radio" className="btn-check" name="btnradio" id="btnTraslado"
+                                    autoComplete="off" checked={tipo === 'TRASLADO'} onChange={() => setTipo('TRASLADO')} />
+                                <label className="btn btn-outline-primary" htmlFor="btnTraslado">🚚 Traslado entre Sedes</label>
+                            </div>
+                        </div>
+
+                        {/* PRODUCTO SEARCH */}
+                        <div className="mb-3 position-relative">
+                            <label className="form-label fw-bold">Producto</label>
+                            {producto ? (
+                                <div className="input-group">
+                                    <span className="form-control bg-light fw-bold text-success">{producto.nombre}</span>
+                                    <button className="btn btn-outline-danger" type="button" onClick={() => setProducto(null)}>&times;</button>
+                                </div>
+                            ) : (
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="🔍 Buscar por nombre o código..."
+                                    value={busqueda}
+                                    onChange={(e) => setBusqueda(e.target.value)}
+                                />
+                            )}
+
+                            {/* RESULTADOS SEARCH DROPDOWN */}
+                            {resultados.length > 0 && !producto && (
+                                <div className="list-group position-absolute w-100 shadow" style={{ zIndex: 1000 }}>
+                                    {resultados.map(p => (
+                                        <button
+                                            key={p.id}
+                                            type="button"
+                                            className="list-group-item list-group-item-action"
+                                            onClick={() => seleccionarProducto(p)}
+                                        >
+                                            <strong>{p.nombre}</strong> <small className="text-muted">({p.codigo_interno})</small>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="row">
+                            {/* SEDE ORIGEN */}
+                            <div className="col-md-6 mb-3">
+                                <label className="form-label fw-bold">
+                                    {tipo === 'ENTRADA' ? 'Sede donde ingresa el stock' : 'Sede de Origen (Donde sale)'}
+                                </label>
+                                <select
+                                    className="form-select"
+                                    value={sedeOrigen}
+                                    onChange={(e) => setSedeOrigen(e.target.value)}
+                                    required
+                                >
+                                    <option value="">Seleccione Sede...</option>
+                                    {sedes.map(s => (
+                                        <option key={s.id} value={s.id}>{s.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* SEDE DESTINO (SOLO TRASLADOS) */}
+                            {tipo === 'TRASLADO' && (
+                                <div className="col-md-6 mb-3">
+                                    <label className="form-label fw-bold text-primary">Sede Destino (Donde entra)</label>
+                                    <select
+                                        className="form-select border-primary"
+                                        value={sedeDestino}
+                                        onChange={(e) => setSedeDestino(e.target.value)}
+                                        required
+                                    >
+                                        <option value="">Seleccione Destino...</option>
+                                        {sedes.map(s => (
+                                            <option key={s.id} value={s.id}>{s.nombre}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="row">
+                            <div className="col-md-4 mb-3">
+                                <label className="form-label fw-bold">Cantidad</label>
+                                <input
+                                    type="number"
+                                    className="form-control"
+                                    value={cantidad}
+                                    onChange={(e) => setCantidad(e.target.value)}
+                                    min="1"
+                                    required
+                                />
+                            </div>
+
+                            {/* COSTO UNITARIO (SOLO ENTRADAS) */}
+                            {tipo === 'ENTRADA' && (
+                                <div className="col-md-4 mb-3">
+                                    <label className="form-label fw-bold text-success">Costo Unitario (Compra)</label>
+                                    <div className="input-group">
+                                        <span className="input-group-text">$</span>
+                                        <input
+                                            type="number"
+                                            className="form-control"
+                                            value={costoUnitario}
+                                            onChange={(e) => setCostoUnitario(e.target.value)}
+                                            placeholder="Costo actual..."
+                                        />
+                                    </div>
+                                    <div className="form-text">Dejar vacío para mantener el promedio actual.</div>
+                                </div>
+                            )}
+
+                            <div className="col-md-8 mb-3">
+                                <label className="form-label fw-bold">Motivo / Referencia</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="Ej: Factura compra #123, Error de conteo..."
+                                    value={motivo}
+                                    onChange={(e) => setMonto(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="d-grid mt-3">
+                            <button type="submit" className="btn btn-dark btn-lg" disabled={loading}>
+                                {loading ? 'Procesando...' : '💾 Registrar Movimiento'}
+                            </button>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default InventoryMovements;

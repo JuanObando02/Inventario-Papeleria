@@ -44,7 +44,7 @@ const Login = () => {
         <div className="d-flex justify-content-center align-items-center vh-100 bg-light">
             <div className="card shadow-sm" style={{ width: '400px' }}>
                 <div className="card-header bg-primary text-white text-center py-3">
-                    <h4 className="mb-0">🔐 Acceso Papelería</h4>
+                    <h4 className="mb-0">Sistema POS Valky detalles</h4>
                 </div>
                 <div className="card-body p-4">
                     {error && <div className="alert alert-danger">{error}</div>}

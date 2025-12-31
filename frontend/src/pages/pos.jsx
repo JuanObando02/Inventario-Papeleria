@@ -28,8 +28,8 @@ const POS = () => {
                 const resCaja = await api.get('ventas/estado-caja/');
 
                 if (!resCaja.data.abierta) {
-                    alert("⚠️ No tienes una caja abierta. Serás redirigido.");
-                    navigate('/menu');
+                    alert("⚠️ No tienes una caja abierta. Serás redirigido a apertura.");
+                    navigate('/apertura-caja');
                     return;
                 }
 
@@ -130,7 +130,7 @@ const POS = () => {
             const response = await api.post('ventas/crear/', ventaData);
 
             if (response.status === 201) {
-                alert(`✅ ¡Venta registrada! Nuevo acumulado: $${response.data.nuevo_acumulado_caja}`);
+                alert(`✅ ¡Venta registrada! Total: $${totalVenta.toLocaleString()}`);
                 setCarrito([]); // Limpiar carrito
 
                 // Recargar inventario

@@ -1,0 +1,155 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+    /* Paleta de Colores: Rosa y Morado para Papelería y Detalles */
+    --bs-primary: #eb0dfd;
+    /* rgb(235, 13, 253) */
+    --bs-primary-rgb: 235, 13, 253;
+
+    --bs-secondary: #f472b6;
+    /* Rosa Pastel */
+    --bs-secondary-rgb: 244, 114, 182;
+
+    --bs-success: #8b5cf6;
+    /* Violeta Suave */
+    --bs-success-rgb: 139, 92, 246;
+
+    --bs-info: #ec4899;
+    /* Rosa Intenso */
+    --bs-info-rgb: 236, 72, 153;
+
+    --bs-warning: #fbcfe8;
+    /* Rosa muy claro */
+
+    --bs-body-font-family: 'Outfit', sans-serif;
+    --bs-body-bg: #fdf2f8;
+    /* Fondo sutilmente rosado */
+}
+
+/* --- Personalización de Componentes para un look "Candy/Gift Shop" --- */
+
+body {
+    background-color: var(--bs-body-bg);
+}
+
+.card {
+    border: none !important;
+    border-radius: 16px !important;
+    box-shadow: 0 4px 15px rgba(217, 70, 239, 0.08) !important;
+    transition: all 0.3s ease;
+}
+
+/* Solo para tarjetas que queremos que salten (Menú) */
+.card-hover:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 25px rgba(217, 70, 239, 0.15) !important;
+    background-color: #fff1f2 !important;
+    /* Blanco rosado sólido */
+}
+
+/* .card:hover removido para evitar movimiento global */
+
+.btn {
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    padding: 8px 20px !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #d946ef 0%, #a21caf 100%) !important;
+    border: none !important;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%) !important;
+    border: none !important;
+}
+
+.btn-info {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+    border: none !important;
+}
+
+.btn-info:hover {
+    background: #0284c7 !important;
+    /* Azul Sólido */
+    box-shadow: 0 6px 15px rgba(2, 132, 199, 0.4) !important;
+}
+
+.btn-pink {
+    background: #f472b6 !important;
+    border: none !important;
+    color: white !important;
+}
+
+.btn-pink:hover {
+    background: #db2777 !important;
+    /* Rosa Sólido Oscuro */
+    box-shadow: 0 6px 15px rgba(219, 39, 119, 0.4) !important;
+}
+
+.btn-primary:hover {
+    background: #a21caf !important;
+    /* Morado Sólido */
+    box-shadow: 0 6px 15px rgba(162, 28, 175, 0.4) !important;
+}
+
+.btn-success:hover {
+    background: #6d28d9 !important;
+    /* Violeta Sólido */
+    box-shadow: 0 6px 15px rgba(109, 40, 217, 0.4) !important;
+}
+
+.bg-primary {
+    background: linear-gradient(135deg, #d946ef 0%, #a21caf 100%) !important;
+}
+
+.border-primary {
+    --bs-border-opacity: 1;
+    border-color: rgb(235 13 253) !important;
+    border-left-color: rgb(235 13 253) !important;
+}
+
+.border-success {
+    border-color: var(--bs-success) !important;
+}
+
+/* Clase ultra-fuerte para el encabezado side */
+.border-fucsia-header {
+    border-left: 6px solid rgb(235, 13, 253) !important;
+}
+
+/* Clase ultra-fuerte para la zona admin top */
+.border-fucsia-admin {
+    border-top: 5px solid rgb(235, 13, 253) !important;
+}
+
+/* Ajustes para el POS y tablas */
+.table thead.table-dark {
+    background: #4a044e !important;
+    /* Morado muy oscuro profesional */
+    border: none;
+}
+
+.badge {
+    border-radius: 6px !important;
+}
+
+/* Efecto Glassmorphism sutil para algunas secciones */
+.bg-light {
+    background-color: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(10px);
+}
+
+input.form-control,
+select.form-select {
+    border-radius: 10px !important;
+    border: 1px solid #f0abfc !important;
+}
+
+input.form-control:focus,
+select.form-select:focus {
+    border-color: #d946ef !important;
+    box-shadow: 0 0 0 0.25rem rgba(217, 70, 239, 0.15) !important;
+}

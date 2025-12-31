@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://127.0.0.1:8000/api/', // La dirección de tu Django
-    timeout: 5000, // Si tarda más de 5 segundos, cancela
+    // Busca la variable de entorno VITE_API_URL. Si no existe (en tu PC), usa localhost.
+    baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/',
+    timeout: 10000, // Si tarda más de 5 segundos, cancela
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'

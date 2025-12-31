@@ -1,6 +1,9 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
-from .views import ProcesarVentaView, CerrarCajaView, punto_venta_view, LoginAPIView, AbrirCajaView, EstadoCajaView
+from .views import (
+    ProcesarVentaView, CerrarCajaView, punto_venta_view, LoginAPIView, 
+    AbrirCajaView, EstadoCajaView, AdminReportesCajaView, AdminDetalleCajaView
+)
 
 urlpatterns = [
     # --- RUTAS DE ACCESO ---
@@ -14,4 +17,8 @@ urlpatterns = [
     path('crear/', ProcesarVentaView.as_view(), name='crear-venta'),
     path('cerrar/<int:pk>/', CerrarCajaView.as_view(), name='cerrar-caja'),
     path('pos/', punto_venta_view, name='pantalla-pos'),
+
+    # --- REPORTES ADMIN ---
+    path('admin/reportes/cajas/', AdminReportesCajaView.as_view(), name='admin-reportes-cajas'),
+    path('admin/reportes/cajas/<int:pk>/', AdminDetalleCajaView.as_view(), name='admin-detalle-caja'),
 ]   

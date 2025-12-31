@@ -96,3 +96,151 @@ class ArmarAnchetaView(APIView):
                 return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class BuscarProductoPublicoView(generics.ListAPIView):
+    """
+    Endpoint para el Verificador de Precios.
+    Busca productos por nombre, código de barras o código interno.
+    No requiere Sede (es búsqueda global de catálogo).
+    """
+    serializer_class = ProductoPOSSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        query = self.request.query_params.get('q', '')
+        if len(query) < 3:
+            return Producto.objects.none()
+        
+        return Producto.objects.filter(
+            Q(nombre__icontains=query) |
+            Q(codigo_barras__icontains=query) |
+            Q(codigo_interno__icontains=query)
+        )[:10] # Limitamos a 10 resultados
+
+from .serializers import MovimientoInventarioSerializer
+
+class RegistrarMovimientoView(generics.CreateAPIView):
+    """
+    Vista para registrar entradas, salidas y traslados.
+    Se conecta con el modelo MovimientoInventario que ya tiene lógica mágica en save().
+    """
+    serializer_class = MovimientoInventarioSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        # Asignamos el usuario que está logueado automáticamente
+        serializer.save(usuario=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        # Sobreescribimos create para capturar errores de validación del modelo (ValidationError)
+        try:
+            return super().create(request, *args, **kwargs)
+        except ValidationError as e:
+             return Response({"error": e.messages}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+from .models import Inventario
+from .serializers import InventarioGlobalSerializer
+from django.db.models import Sum, F
+
+class AdminInventarioGlobalView(generics.ListAPIView):
+    serializer_class = InventarioGlobalSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Inventario.objects.all().select_related('producto', 'sede')
+        sede_id = self.request.query_params.get('sede_id')
+        if sede_id:
+            queryset = queryset.filter(sede_id=sede_id)
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        sede_id = self.request.query_params.get('sede_id')
+        queryset = self.get_queryset()
+        
+        # 1. Calcular Resumen Global (este siempre es total de lo que hay en el queryset)
+        summary = queryset.aggregate(
+            total_items=Sum('stock_actual'),
+            valor_total_costo=Sum(F('stock_actual') * F('producto__precio_costo')),
+            valor_total_venta=Sum(F('stock_actual') * F('producto__precio_venta'))
+        )
+
+        # 2. Si no hay sede_id, agrupamos por producto
+        if not sede_id:
+            # Agregamos por producto para evitar repeticiones
+            grouped_data = queryset.values(
+                'producto_id', 
+                'producto__nombre', 
+                'producto__tipo',
+                'producto__precio_costo', 
+                'producto__precio_venta'
+            ).annotate(
+                total_stock=Sum('stock_actual'),
+                total_costo_acumulado=Sum(F('stock_actual') * F('producto__precio_costo')),
+                total_venta_acumulado=Sum(F('stock_actual') * F('producto__precio_venta'))
+            ).order_by('producto__nombre')
+
+            inventario_list = []
+            for item in grouped_data:
+                inventario_list.append({
+                    "id": item['producto_id'], # Usamos el ID del producto como referencia
+                    "sede_nombre": "Todas las Sedes",
+                    "producto_nombre": item['producto__nombre'],
+                    "producto_tipo": item['producto__tipo'],
+                    "stock_actual": item['total_stock'],
+                    "producto_costo": item['producto__precio_costo'],
+                    "producto_precio": item['producto__precio_venta'],
+                    "valor_total_costo": item['total_costo_acumulado'] or 0,
+                    "valor_total_venta": item['total_venta_acumulado'] or 0
+                })
+            
+            return Response({
+                "resumen": summary,
+                "inventario": inventario_list
+            })
+        
+        # 3. Si hay sede_id, devolvemos la lista normal serializada
+        serializer = self.get_serializer(queryset, many=True)
+        
+        return Response({
+            "resumen": summary,
+            "inventario": serializer.data
+        })
+
+from .models import Categoria
+class ListarCategoriasView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    queryset = Categoria.objects.all()
+    serializer_class = None # Usaremos un serializer simple on-the-fly o values
+    
+    def list(self, request, *args, **kwargs):
+        data = self.get_queryset().values('id', 'nombre')
+        return Response(list(data))
+
+from .serializers import ProductoCreateSerializer
+
+class CrearProductoView(generics.CreateAPIView):
+    """
+    Vista para crear productos desde el Frontend (Admin).
+    Soporta creación de Anchetas con sus ingredientes.
+    """
+    serializer_class = ProductoCreateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        # Validar que sea ADMIN
+        if not hasattr(self.request.user, 'perfil') or self.request.user.perfil.rol != 'ADMIN':
+             raise ValidationError("Solo los administradores pueden crear productos.")
+        
+        serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except ValidationError as e:
+             return Response({"error": e.messages}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
