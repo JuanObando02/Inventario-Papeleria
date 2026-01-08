@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import Sede, Categoria, Producto, RecetaAncheta, Inventario, MovimientoInventario
+from django.db.models import Sum
 
 @admin.register(Sede)
 class SedeAdmin(admin.ModelAdmin):
@@ -24,9 +25,9 @@ class ProductoAdmin(admin.ModelAdmin):
 
     # Función auxiliar para ver el stock sumado de todas las sedes en la lista
     def get_stock_total(self, obj):
-        from django.db.models import Sum
         resultado = obj.inventarios.aggregate(total=Sum('stock_actual'))
         return resultado['total'] or 0
+
     get_stock_total.short_description = "Stock Global"
 
 @admin.register(Categoria)

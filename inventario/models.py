@@ -13,7 +13,8 @@ class Sede(models.Model):
         return self.nombre
 
 class Categoria(models.Model):
-    nombre = models.CharField(max_length=100, unique=True)
+    nombre = models.CharField(max_length=100, unique=True, help_text="Coloca el nombre de la categoria del producto")
+
     def __str__(self):
         return self.nombre
 
@@ -40,14 +41,14 @@ class Producto(models.Model):
     unidad_medida = models.CharField(max_length=20, default='UND')
     activo = models.BooleanField(default=True)
 
-    
     # RELACIÓN MÁGICA: Un producto puede tener "componentes" que también son productos.
     # 'symmetrical=False' es vital: Si la ancheta tiene un chocolate, 
     # no significa que el chocolate tenga una ancheta.
+
     componentes = models.ManyToManyField(
-        'self', 
-        through='RecetaAncheta', 
-        symmetrical=False, 
+        'self',
+        through='RecetaAncheta',
+        symmetrical=False,
         related_name='parte_de_kits'
     )
     
@@ -80,9 +81,9 @@ class Inventario(models.Model):
         return f"{self.producto.nombre} en {self.sede.nombre}: {self.stock_actual}"
 
     def clean(self):
-        # Servicios no deben tener inventario físico en ninguna sede
-        if self.producto.tipo == 'SERVICIO' and self.stock_actual > 0:
-            raise ValidationError("Un servicio no puede tener stock físico.")
+        # Servicios y Anchetas (dinámicas) no deben tener inventario físico en ninguna sede
+        if self.producto.tipo in ['SERVICIO', 'ANCHETA'] and self.stock_actual > 0:
+            raise ValidationError(f"Un producto de tipo {self.producto.tipo} no puede tener stock físico.")
 
 class RecetaAncheta(models.Model):
     producto_padre = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='ingredientes')
@@ -105,6 +106,7 @@ class RecetaAncheta(models.Model):
         super().save(*args, **kwargs)
 
 class MovimientoInventario(models.Model):
+
     TIPOS = (
         ('ENTRADA', 'Entrada / Compra'), # Suma stock
         ('SALIDA', 'Salida / Ajuste / Pérdida'), # Resta stock (ej. robo, daño)
@@ -161,7 +163,6 @@ class MovimientoInventario(models.Model):
 
         # Si es un registro nuevo, aplicamos los cambios matemáticos
         if not self.pk: 
-            
             if self.tipo == 'ENTRADA':
                 # Para entradas, aseguramos que exista el registro de inventario
                 inv_origen, created = Inventario.objects.get_or_create(

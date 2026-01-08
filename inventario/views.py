@@ -118,6 +118,31 @@ class BuscarProductoPublicoView(generics.ListAPIView):
             Q(codigo_interno__icontains=query)
         )[:10] # Limitamos a 10 resultados
 
+from .serializers import ProductoAdminSerializer
+
+class BuscarProductoAdminView(generics.ListAPIView):
+    """
+    Endpoint para búsqueda de productos con datos de costo.
+    Solo para administradores.
+    """
+    serializer_class = ProductoAdminSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Validar que sea ADMIN
+        if not hasattr(self.request.user, 'perfil') or self.request.user.perfil.rol != 'ADMIN':
+             return Producto.objects.none()
+
+        query = self.request.query_params.get('q', '')
+        if len(query) < 2: # Bajamos el limite a 2 para admin
+            return Producto.objects.none()
+        
+        return Producto.objects.filter(
+            Q(nombre__icontains=query) |
+            Q(codigo_barras__icontains=query) |
+            Q(codigo_interno__icontains=query)
+        )[:15]
+
 from .serializers import MovimientoInventarioSerializer
 
 class RegistrarMovimientoView(generics.CreateAPIView):

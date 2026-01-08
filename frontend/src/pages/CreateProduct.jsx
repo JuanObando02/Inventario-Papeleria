@@ -16,6 +16,7 @@ const CreateProduct = () => {
     const [categoria, setCategoria] = useState('');
     const [precioCosto, setPrecioCosto] = useState('');
     const [precioVenta, setPrecioVenta] = useState('');
+    const [margen, setMargen] = useState(''); // Porcentaje de ganancia
     const [unidad, setUnidad] = useState('UND');
 
     // Aux Data
@@ -44,7 +45,7 @@ const CreateProduct = () => {
         if (tipo !== 'ANCHETA') return;
         const timeoutId = setTimeout(() => {
             if (busqueda.length > 2) {
-                api.get(`inventario/buscar-publico/?q=${busqueda}`)
+                api.get(`inventario/admin/buscar-productos/?q=${busqueda}`)
                     .then(res => setResultados(res.data))
                     .catch(console.error);
             } else {
@@ -61,14 +62,12 @@ const CreateProduct = () => {
             return;
         }
         // Agregamos con cantidad 1
-        // Nota: 'prod' viene del serializer ProductoPOSSerializer, que trae 'precio_venta' pero NO 'precio_costo' (por seguridad de endpoint público).
-        // Si queremos calcular el costo exacto de la ancheta, idealmente necesitaríamos el costo. 
-        // Pero el endpoint buscar-publico es publico. 
-        // Asumiremos costo 0 o permitiremos al usuario editar el costo total al final.
+        // Ahora el endpoint de admin SI trae el precio_costo
         setIngredientes([...ingredientes, {
             producto_hijo: prod.id,
             nombre: prod.nombre,
-            cantidad: 1
+            cantidad: 1,
+            precio_costo: parseFloat(prod.precio_costo || 0)
         }]);
         setBusqueda('');
         setResultados([]);
@@ -83,6 +82,25 @@ const CreateProduct = () => {
             i.producto_hijo === id ? { ...i, cantidad: parseInt(cant) || 1 } : i
         ));
     };
+
+    // Auto-calcular costo cuando cambian los ingredientes
+    useEffect(() => {
+        if (tipo === 'ANCHETA' && ingredientes.length > 0) {
+            const total = ingredientes.reduce((acc, ing) => acc + (ing.precio_costo * ing.cantidad), 0);
+            setPrecioCosto(total.toFixed(2));
+        }
+    }, [ingredientes, tipo]);
+
+    // Calcular Precio de Venta basado en Margen
+    useEffect(() => {
+        const costo = parseFloat(precioCosto);
+        const porc = parseFloat(margen);
+
+        if (!isNaN(costo) && !isNaN(porc)) {
+            const venta = costo + (costo * (porc / 100));
+            setPrecioVenta(Math.round(venta).toString()); // Redondeamos para evitar decimales molestos en venta
+        }
+    }, [precioCosto, margen]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -109,7 +127,7 @@ const CreateProduct = () => {
                 return;
             }
             payload.ingredientes = ingredientes.map(i => ({
-                producto_hijo: i.producto_hijo,
+                producto_hijo_id: i.producto_hijo,
                 cantidad: i.cantidad
             }));
         }
@@ -123,6 +141,7 @@ const CreateProduct = () => {
             setCodigoBarras('');
             setPrecioCosto('');
             setPrecioVenta('');
+            setMargen('');
             setIngredientes([]);
         } catch (error) {
             console.error(error);
@@ -196,16 +215,23 @@ const CreateProduct = () => {
                             </div>
                         </div>
 
-                        {/* PRICES */}
                         <div className="row mb-3">
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <label className="form-label fw-bold text-danger">Precio de Costo (Compra)</label>
                                 <div className="input-group">
                                     <span className="input-group-text">$</span>
                                     <input type="number" className="form-control" required value={precioCosto} onChange={e => setPrecioCosto(e.target.value)} />
                                 </div>
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
+                                <label className="form-label fw-bold text-primary">Margen de Ganancia (%)</label>
+                                <div className="input-group">
+                                    <input type="number" className="form-control" placeholder="Ej: 30" value={margen} onChange={e => setMargen(e.target.value)} />
+                                    <span className="input-group-text">%</span>
+                                </div>
+                                <small className="text-muted">Calcula la venta automáticamente</small>
+                            </div>
+                            <div className="col-md-4">
                                 <label className="form-label fw-bold text-success">Precio de Venta (Público)</label>
                                 <div className="input-group">
                                     <span className="input-group-text">$</span>
@@ -245,7 +271,9 @@ const CreateProduct = () => {
                                         <thead>
                                             <tr>
                                                 <th>Producto</th>
-                                                <th style={{ width: '100px' }}>Cant.</th>
+                                                <th style={{ width: '80px' }}>Cant.</th>
+                                                <th>Costo Unit.</th>
+                                                <th>Subtotal</th>
                                                 <th>Acción</th>
                                             </tr>
                                         </thead>
@@ -262,6 +290,8 @@ const CreateProduct = () => {
                                                             onChange={e => cambiarCantidadIngrediente(ing.producto_hijo, e.target.value)}
                                                         />
                                                     </td>
+                                                    <td>${ing.precio_costo.toLocaleString()}</td>
+                                                    <td>${(ing.precio_costo * ing.cantidad).toLocaleString()}</td>
                                                     <td>
                                                         <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => eliminarIngrediente(ing.producto_hijo)}>
                                                             &times;
@@ -270,6 +300,12 @@ const CreateProduct = () => {
                                                 </tr>
                                             ))}
                                         </tbody>
+                                        <tfoot>
+                                            <tr className="table-dark">
+                                                <td colSpan="3" className="text-end fw-bold">Costo Total Sugerido:</td>
+                                                <td colSpan="2" className="fw-bold">${ingredientes.reduce((acc, i) => acc + (i.precio_costo * i.cantidad), 0).toLocaleString()}</td>
+                                            </tr>
+                                        </tfoot>
                                     </table>
                                 ) : (
                                     <p className="text-muted text-center">Agrega productos que componen este Kit.</p>

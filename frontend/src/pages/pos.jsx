@@ -14,11 +14,12 @@ const POS = () => {
     const [cargando, setCargando] = useState(true);
     const [sesionCajaId, setSesionCajaId] = useState(null);
 
-    // Estados para manejo de Sedes (feature Admin)
-    const [sedeSesion, setSedeSesion] = useState(null); // La sede donde está la CAJA ABIERTA
-    const [sedeVisual, setSedeVisual] = useState(null); // La sede que estamos VIENDO
-    const [listaSedes, setListaSedes] = useState([]);
     const [metodoPago, setMetodoPago] = useState('EFECTIVO');
+
+    // Estados para Ancheta Dinámica
+    const [anchetaIndex, setAnchetaIndex] = useState(null); // Índice del item en carrito
+    const [busquedaComp, setBusquedaComp] = useState('');
+    const [mostrarModal, setMostrarModal] = useState(false);
 
     // 1. CARGA INICIAL
     useEffect(() => {
@@ -79,27 +80,81 @@ const POS = () => {
 
     // 3. LOGICA CARRITO
     const agregarAlCarrito = (producto) => {
-        const existe = carrito.find(item => item.id === producto.id);
+        const existeIndex = carrito.findIndex(item => item.id === producto.id);
 
-        // Validar Stock visualmente (Opcional, el backend valida igual)
-        if (producto.tipo !== 'SERVICIO' && producto.stock <= 0) {
+        // Validar Stock
+        const esServicioOAncheta = producto.tipo === 'SERVICIO' || producto.tipo === 'ANCHETA';
+        if (!esServicioOAncheta && producto.stock <= 0) {
             alert("Producto sin stock disponible");
             return;
         }
 
-        if (existe) {
-            if (producto.tipo !== 'SERVICIO' && existe.cantidad >= producto.stock) {
+        if (existeIndex !== -1) {
+            const existe = carrito[existeIndex];
+            if (!esServicioOAncheta && existe.cantidad >= producto.stock) {
                 alert("No hay más stock disponible");
                 return;
             }
-            setCarrito(carrito.map(item =>
-                item.id === producto.id
-                    ? { ...item, cantidad: item.cantidad + 1 }
-                    : item
-            ));
+            const nuevoCarrito = [...carrito];
+            nuevoCarrito[existeIndex].cantidad += 1;
+            setCarrito(nuevoCarrito);
         } else {
-            setCarrito([...carrito, { ...producto, cantidad: 1 }]);
+            const nuevoItem = {
+                ...producto,
+                cantidad: 1,
+                precio_base_ancheta: producto.tipo === 'ANCHETA' ? parseFloat(producto.precio_venta) : 0,
+                componentes: []
+            };
+            const nuevoCarrito = [...carrito, nuevoItem];
+            setCarrito(nuevoCarrito);
+
+            // Si es Ancheta, abrir editor inmediatamente
+            if (producto.tipo === 'ANCHETA') {
+                setAnchetaIndex(nuevoCarrito.length - 1);
+                setMostrarModal(true);
+            }
         }
+    };
+
+    const actualizarComponente = (prodComp, operacion) => {
+        if (anchetaIndex === null) return;
+
+        const nuevoCarrito = [...carrito];
+        const item = nuevoCarrito[anchetaIndex];
+
+        const indexComp = item.componentes.findIndex(c => c.producto_id === prodComp.id);
+
+        if (operacion === 'SUMAR') {
+            if (prodComp.stock <= 0) return alert("Componente sin stock");
+
+            if (indexComp !== -1) {
+                item.componentes[indexComp].cantidad += 1;
+            } else {
+                item.componentes.push({
+                    producto_id: prodComp.id,
+                    nombre: prodComp.nombre,
+                    precio_venta: parseFloat(prodComp.precio_venta),
+                    cantidad: 1
+                });
+            }
+        } else {
+            if (indexComp !== -1) {
+                if (item.componentes[indexComp].cantidad > 1) {
+                    item.componentes[indexComp].cantidad -= 1;
+                } else {
+                    item.componentes.splice(indexComp, 1);
+                }
+            }
+        }
+
+        // RECALCULAR PRECIO DE LA ANCHETA
+        let nuevoTotalUnitario = item.precio_base_ancheta;
+        item.componentes.forEach(c => {
+            nuevoTotalUnitario += (c.precio_venta * c.cantidad);
+        });
+        item.precio_venta = nuevoTotalUnitario;
+
+        setCarrito(nuevoCarrito);
     };
 
     const eliminarDelCarrito = (id) => {
@@ -122,7 +177,11 @@ const POS = () => {
             metodo_pago: metodoPago,
             detalles: carrito.map(item => ({
                 producto_id: item.id,
-                cantidad: item.cantidad
+                cantidad: item.cantidad,
+                componentes: item.tipo === 'ANCHETA' ? item.componentes.map(c => ({
+                    producto_id: c.producto_id,
+                    cantidad: c.cantidad
+                })) : []
             }))
         };
 
@@ -246,9 +305,24 @@ const POS = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {carrito.map(item => (
-                                        <tr key={item.id}>
-                                            <td className="text-truncate" style={{ maxWidth: '120px' }}>{item.nombre}</td>
+                                    {carrito.map((item, idx) => (
+                                        <tr key={`${item.id}-${idx}`}>
+                                            <td className="text-truncate" style={{ maxWidth: '120px' }}>
+                                                {item.nombre}
+                                                {item.tipo === 'ANCHETA' && (
+                                                    <div className="small text-muted">
+                                                        <button
+                                                            className="btn btn-link btn-sm p-0 text-decoration-none"
+                                                            onClick={() => { setAnchetaIndex(idx); setMostrarModal(true); }}
+                                                        >
+                                                            🔧 Editar Componentes
+                                                        </button>
+                                                        {item.componentes.map(c => (
+                                                            <div key={c.producto_id}>• {c.cantidad}x {c.nombre}</div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </td>
                                             <td className="fw-bold text-center">{item.cantidad}</td>
                                             <td>${(item.precio_venta * item.cantidad).toLocaleString()}</td>
                                             <td>
@@ -302,6 +376,77 @@ const POS = () => {
                     </div>
                 </div>
             </div>
+            {/* MODAL CONFIGURACIÓN ANCHETA */}
+            {mostrarModal && anchetaIndex !== null && (
+                <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="modal-dialog modal-lg">
+                        <div className="modal-content">
+                            <div className="modal-header bg-dark text-white">
+                                <h5 className="modal-title">Configurar Ancheta: {carrito[anchetaIndex].nombre}</h5>
+                                <button type="button" className="btn-close btn-close-white" onClick={() => setMostrarModal(false)}></button>
+                            </div>
+                            <div className="modal-body">
+                                <div className="row">
+                                    <div className="col-md-6 border-end">
+                                        <h6>🔍 Agregar Componentes</h6>
+                                        <input
+                                            type="text"
+                                            className="form-control mb-2"
+                                            placeholder="Buscar producto..."
+                                            value={busquedaComp}
+                                            onChange={(e) => setBusquedaComp(e.target.value)}
+                                        />
+                                        <div className="overflow-auto" style={{ maxHeight: '300px' }}>
+                                            <table className="table table-hover table-sm">
+                                                <tbody>
+                                                    {productos
+                                                        .filter(p => p.tipo === 'FISICO' && p.nombre.toLowerCase().includes(busquedaComp.toLowerCase()))
+                                                        .map(p => (
+                                                            <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => actualizarComponente(p, 'SUMAR')}>
+                                                                <td>{p.nombre}</td>
+                                                                <td className="text-primary fw-bold">${parseFloat(p.precio_venta).toLocaleString()}</td>
+                                                                <td><span className="badge bg-secondary">Stock: {p.stock}</span></td>
+                                                            </tr>
+                                                        ))
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div className="col-md-6">
+                                        <h6>🎁 Contenido Actual</h6>
+                                        {carrito[anchetaIndex].componentes.length === 0 ? (
+                                            <p className="text-muted">Aún no hay componentes agregados.</p>
+                                        ) : (
+                                            <ul className="list-group">
+                                                {carrito[anchetaIndex].componentes.map(c => (
+                                                    <li key={c.producto_id} className="list-group-item d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            {c.nombre}
+                                                            <div className="small text-muted">${c.precio_venta.toLocaleString()} c/u</div>
+                                                        </div>
+                                                        <div className="d-flex align-items-center gap-2">
+                                                            <button className="btn btn-sm btn-outline-danger" onClick={() => actualizarComponente(c, 'RESTAR')}>-</button>
+                                                            <span className="fw-bold">{c.cantidad}</span>
+                                                            <button className="btn btn-sm btn-outline-primary" onClick={() => actualizarComponente(c, 'SUMAR')}>+</button>
+                                                        </div>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                        <div className="mt-3 fs-5 text-end fw-bold text-success">
+                                            Subtotal Ancheta: ${parseFloat(carrito[anchetaIndex].precio_venta).toLocaleString()}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn btn-primary" onClick={() => setMostrarModal(false)}>Listo</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

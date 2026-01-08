@@ -27,6 +27,15 @@ class ProductoPOSSerializer(serializers.ModelSerializer):
         except Inventario.DoesNotExist:
             return 0
 
+class ProductoAdminSerializer(serializers.ModelSerializer):
+    """Serializer para uso administrativo que incluye el costo"""
+    class Meta:
+        model = Producto
+        fields = [
+            'id', 'nombre', 'precio_venta', 'precio_costo',
+            'codigo_barras', 'codigo_interno', 'tipo'
+        ]
+
 class ArmarAnchetaInputSerializer(serializers.Serializer):
     producto_id = serializers.IntegerField(help_text="ID del producto tipo Ancheta")
     sede_id = serializers.IntegerField(help_text="ID de la sede donde se armará")
@@ -119,11 +128,21 @@ class ProductoCreateSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         ingredientes_data = validated_data.pop('ingredientes', [])
+        tipo = validated_data.get('tipo', 'FISICO')
         
-        # 1. Crear el Producto Padre
+        # 1. Si es ANCHETA, recalculamos el costo basándonos en los ingredientes reales
+        if tipo == 'ANCHETA' and ingredientes_data:
+            costo_calculado = 0
+            for item in ingredientes_data:
+                prod_hijo = item['producto_hijo']
+                cantidad = item.get('cantidad', 1)
+                costo_calculado += (prod_hijo.precio_costo * cantidad)
+            validated_data['precio_costo'] = costo_calculado
+
+        # 2. Crear el Producto Padre
         producto = Producto.objects.create(**validated_data)
         
-        # 2. Si es Ancheta y hay ingredientes, crearlos
+        # 3. Si es Ancheta y hay ingredientes, crearlos
         if producto.tipo == 'ANCHETA' and ingredientes_data:
             recetas = []
             for item in ingredientes_data:

@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     ListarProductosPOS, ArmarAnchetaView, ListarSedesView, 
     BuscarProductoPublicoView, RegistrarMovimientoView, AdminInventarioGlobalView,
-    ListarCategoriasView, CrearProductoView
+    ListarCategoriasView, CrearProductoView, BuscarProductoAdminView
 )
 
 urlpatterns = [
@@ -14,4 +14,5 @@ urlpatterns = [
     path('movimientos/crear/', RegistrarMovimientoView.as_view(), name='api-crear-movimiento'),
     path('admin/inventario-global/', AdminInventarioGlobalView.as_view(), name='api-admin-inventario-global'),
     path('admin/crear-producto/', CrearProductoView.as_view(), name='api-crear-producto'),
+    path('admin/buscar-productos/', BuscarProductoAdminView.as_view(), name='api-admin-buscar-productos'),
 ]
