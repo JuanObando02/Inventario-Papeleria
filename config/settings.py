@@ -8,14 +8,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --- SEGURIDAD PARA PRODUCCIÓN ---
 
 # Lee la SECRET_KEY de Railway, si no hay, usa la insegura (solo para local)
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-tfa!_*)q10^q+_*#-&7vp665$1w%0^mkaiuiy^*!sjn-cf(8lb')
+SECRET_KEY = os.environ.get(
+    'SECRET_KEY', 
+    'django-insecure-tfa!_*)q10^q+_*#-&7vp665$1w%0^mkaiuiy^*!sjn-cf(8lb'
+)
 
-# Si existe la variable 'RAILWAY_ENVIRONMENT', desactiva el DEBUG
-# (Puedes agregar esta variable en Railway con valor "true")
-DEBUG = 'RAILWAY_ENVIRONMENT' not in os.environ
+DEBUG = os.getenv("DEBUG", "False") == "True"
 
 # Permitir todos los hosts (necesario para que Railway funcione sin líos de dominios)
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
 
 # Application definition
@@ -72,7 +73,10 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if DATABASE_URL:
     DATABASES = {
-        'default': dj_database_url.config(default=DATABASE_URL, conn_max_age=600)
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600
+        )
     }
 else:
     # Configuración local (SQLite)
@@ -101,7 +105,7 @@ USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # CORRECCIÓN: La variable correcta es STATICFILES_STORAGE, no STORAGE
@@ -113,7 +117,10 @@ LOGOUT_REDIRECT_URL = 'login'
 # CORS
 # Permitimos todo para evitar dolores de cabeza iniciales en el despliegue
 CORS_ALLOW_ALL_ORIGINS = True
-CSRF_TRUSTED_ORIGINS = ["https://*.railway.app"]
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    "CSRF_TRUSTED_ORIGINS",
+    ""
+).split(",")
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -124,3 +131,8 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True") == "True"
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
