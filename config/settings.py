@@ -117,6 +117,7 @@ LOGOUT_REDIRECT_URL = 'login'
 # CORS
 # Permitimos todo para evitar dolores de cabeza iniciales en el despliegue
 CORS_ALLOW_ALL_ORIGINS = True
+
 CSRF_TRUSTED_ORIGINS = os.getenv(
     "CSRF_TRUSTED_ORIGINS",
     ""
@@ -132,7 +133,7 @@ REST_FRAMEWORK = {
     ]
 }
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True") == "True"
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+#SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+#SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True") == "True"
+#SESSION_COOKIE_SECURE = True
+#CSRF_COOKIE_SECURE = True
