@@ -13,6 +13,9 @@ const POS = () => {
     const [carrito, setCarrito] = useState([]);
     const [cargando, setCargando] = useState(true);
     const [sesionCajaId, setSesionCajaId] = useState(null);
+    const [sedeSesion, setSedeSesion] = useState(null);
+    const [sedeVisual, setSedeVisual] = useState(null);
+    const [listaSedes, setListaSedes] = useState([]);
 
     const [metodoPago, setMetodoPago] = useState('EFECTIVO');
 

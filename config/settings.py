@@ -118,10 +118,17 @@ LOGOUT_REDIRECT_URL = 'login'
 # Permitimos todo para evitar dolores de cabeza iniciales en el despliegue
 CORS_ALLOW_ALL_ORIGINS = True
 
-CSRF_TRUSTED_ORIGINS = os.getenv(
-    "CSRF_TRUSTED_ORIGINS",
-    ""
-).split(",")
+csrf_env = os.getenv('CSRF_TRUSTED_ORIGINS')
+
+if csrf_env:
+    # En Coolify: convertimos el texto separado por comas en una lista
+    CSRF_TRUSTED_ORIGINS = csrf_env.split(',')
+else:
+    # En tu PC (Local): como no hay variable de entorno, usa estos valores
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:8000',
+        'http://127.0.0.1:8000',
+    ]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
