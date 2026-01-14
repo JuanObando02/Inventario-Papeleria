@@ -13,7 +13,7 @@ SECRET_KEY = os.environ.get(
     'django-insecure-tfa!_*)q10^q+_*#-&7vp665$1w%0^mkaiuiy^*!sjn-cf(8lb'
 )
 
-DEBUG = os.getenv("DEBUG", "False") == "True"
+DEBUG = os.getenv("DEBUG", "True") == "True"
 
 # Permitir todos los hosts (necesario para que Railway funcione sin líos de dominios)
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
@@ -127,7 +127,7 @@ else:
     # En tu PC (Local): como no hay variable de entorno, usa estos valores
     CSRF_TRUSTED_ORIGINS = [
         'http://localhost:8000',
-        'http://127.0.0.1:8000',
+        'http://127.0.0.1:8000', 
     ]
 
 REST_FRAMEWORK = {
@@ -139,7 +139,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
-
+print(f"VALOR DEL ENV: {os.getenv('PROBANDO_ENV')}")
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 if not DEBUG:
@@ -147,8 +147,15 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000 # 1 año
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 else:
     # --- EN LOCAL (Tu PC) ---
     SECURE_SSL_REDIRECT = False
     SESSION_COOKIE_SECURE = False
     CSRF_COOKIE_SECURE = False
+    # Evita que el navegador recuerde la redirección a HTTPS (HSTS)
+    SECURE_HSTS_SECONDS = 0
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False

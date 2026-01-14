@@ -269,3 +269,28 @@ class CrearProductoView(generics.CreateAPIView):
              return Response({"error": e.messages}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
              return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class GenerarSiguienteCodigoProductoView(APIView):
+    """
+    Genera el siguiente codigo interno disponible, partiendo de 1000.
+    Ignora codigos alfanumericos que no sean convertibles a entero.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not hasattr(request.user, 'perfil') or request.user.perfil.rol != 'ADMIN':
+             return Response({"error": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
+
+        codigos = Producto.objects.values_list('codigo_interno', flat=True)
+        
+        max_codigo = 999
+        
+        for c in codigos:
+            # Verificamos si es puramente digitos para evitar errores con "PROD-001"
+            if c and c.isdigit():
+                val = int(c)
+                if val > max_codigo:
+                    max_codigo = val
+        
+        siguiente = max_codigo + 1
+        return Response({"siguiente_codigo": str(siguiente)})

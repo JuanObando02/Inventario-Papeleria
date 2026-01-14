@@ -102,6 +102,20 @@ const CreateProduct = () => {
         }
     }, [precioCosto, margen]);
 
+    // Generate Next Code Logic
+    const generarCodigo = () => {
+        // No bloqueamos con lading global para que no parezca que se congela todo,
+        // pero podriamos poner un mini spinner si fuera lento.
+        api.get('inventario/admin/generar-codigo/')
+            .then(res => {
+                setCodigoInterno(res.data.siguiente_codigo);
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Error al generar el código");
+            });
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -177,7 +191,12 @@ const CreateProduct = () => {
                             </div>
                             <div className="col-md-3">
                                 <label className="form-label fw-bold">Código Interno / PLU</label>
-                                <input type="text" className="form-control" required value={codigoInterno} onChange={e => setCodigoInterno(e.target.value)} />
+                                <div className="input-group">
+                                    <input type="text" className="form-control" required value={codigoInterno} onChange={e => setCodigoInterno(e.target.value)} />
+                                    <button type="button" className="btn btn-outline-secondary" onClick={generarCodigo} title="Generar Siguiente Código">
+                                        ⚡ Auto
+                                    </button>
+                                </div>
                             </div>
                             <div className="col-md-3">
                                 <label className="form-label fw-bold">Código de Barras</label>
