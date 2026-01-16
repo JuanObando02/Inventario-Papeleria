@@ -46,10 +46,10 @@ class ListarProductosPOS(generics.ListAPIView):
         self.sede_target = sede_target
 
         # 2. Filtrar Productos: 
-        # Traemos productos con stock en la sede OR que sean SERVICIOS (globales)
+        # Traemos productos con stock en la sede OR que sean SERVICIOS o ANCHETAS (globales/sin stock propio)
         return Producto.objects.filter(
             Q(inventarios__sede=sede_target, inventarios__stock_actual__gt=0) |
-            Q(tipo='SERVICIO')
+            Q(tipo__in=['SERVICIO', 'ANCHETA'])
         ).distinct()
 
     def get_serializer_context(self):
@@ -143,7 +143,7 @@ class BuscarProductoAdminView(generics.ListAPIView):
             Q(codigo_interno__icontains=query)
         )[:15]
 
-from .serializers import MovimientoInventarioSerializer
+from .serializers import MovimientoInventarioSerializer, CrearCategoriaSerializer
 
 class RegistrarMovimientoView(generics.CreateAPIView):
     """
@@ -176,7 +176,10 @@ class AdminInventarioGlobalView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Inventario.objects.all().select_related('producto', 'sede')
+        queryset = Inventario.objects.filter(
+            producto__tipo='FISICO'
+        ).select_related('producto', 'sede')
+        
         sede_id = self.request.query_params.get('sede_id')
         if sede_id:
             queryset = queryset.filter(sede_id=sede_id)
@@ -245,6 +248,30 @@ class ListarCategoriasView(generics.ListAPIView):
         data = self.get_queryset().values('id', 'nombre')
         return Response(list(data))
 
+class CrearCategoriaView(generics.CreateAPIView):
+    """
+    """
+    serializer_class = CrearCategoriaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        # Validar que sea ADMIN
+        if not hasattr(self.request.user, 'perfil') or self.request.user.perfil.rol != 'ADMIN':
+             raise ValidationError("Solo los administradores pueden crear categorías.")
+        
+        serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        try:
+             return super().create(request, *args, **kwargs)
+        except ValidationError as e:
+             return Response({"error": e.messages}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+             # Capturar error de unique (categoria repetida)
+             if "unique constraint" in str(e).lower():
+                  return Response({"error": "Esta categoría ya existe."}, status=status.HTTP_400_BAD_REQUEST)
+             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 from .serializers import ProductoCreateSerializer
 
 class CrearProductoView(generics.CreateAPIView):
@@ -269,3 +296,28 @@ class CrearProductoView(generics.CreateAPIView):
              return Response({"error": e.messages}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
              return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class GenerarSiguienteCodigoProductoView(APIView):
+    """
+    Genera el siguiente codigo interno disponible, partiendo de 1000.
+    Ignora codigos alfanumericos que no sean convertibles a entero.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not hasattr(request.user, 'perfil') or request.user.perfil.rol != 'ADMIN':
+             return Response({"error": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
+
+        codigos = Producto.objects.values_list('codigo_interno', flat=True)
+        
+        max_codigo = 999
+        
+        for c in codigos:
+            # Verificamos si es puramente digitos para evitar errores con "PROD-001"
+            if c and c.isdigit():
+                val = int(c)
+                if val > max_codigo:
+                    max_codigo = val
+        
+        siguiente = max_codigo + 1
+        return Response({"siguiente_codigo": str(siguiente)})

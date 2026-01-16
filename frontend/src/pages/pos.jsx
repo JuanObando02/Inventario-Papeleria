@@ -18,6 +18,12 @@ const POS = () => {
     const [listaSedes, setListaSedes] = useState([]);
 
     const [metodoPago, setMetodoPago] = useState('EFECTIVO');
+    const [clienteNombre, setClienteNombre] = useState('Cliente General');
+
+    // Filtros
+    const [filtroTipo, setFiltroTipo] = useState('TODOS');
+    const [filtroCategoria, setFiltroCategoria] = useState('TODAS');
+    const [listaCategorias, setListaCategorias] = useState([]);
 
     // Estados para Ancheta Dinámica
     const [anchetaIndex, setAnchetaIndex] = useState(null); // Índice del item en carrito
@@ -50,6 +56,10 @@ const POS = () => {
                     setListaSedes(resSedes.data);
                 }
 
+                // 4. Cargar Categorías para el filtro
+                const resCats = await api.get('inventario/categorias/');
+                setListaCategorias(resCats.data);
+
             } catch (error) {
                 console.error("Error cargando datos:", error);
                 alert("Error de conexión. Intenta recargar.");
@@ -76,10 +86,20 @@ const POS = () => {
     };
 
     // 2. FILTROS
-    const productosFiltrados = productos.filter(p =>
-        p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-        (p.codigo_barras && p.codigo_barras.includes(busqueda))
-    );
+    const productosFiltrados = productos.filter(p => {
+        // Filtro por búsqueda (nombre o códigos)
+        const matchBusqueda = p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+            (p.codigo_barras && p.codigo_barras.includes(busqueda)) ||
+            (p.codigo_interno && p.codigo_interno.includes(busqueda));
+
+        // Filtro por tipo
+        const matchTipo = filtroTipo === 'TODOS' || p.tipo === filtroTipo;
+
+        // Filtro por categoría
+        const matchCategoria = filtroCategoria === 'TODAS' || p.categoria === parseInt(filtroCategoria);
+
+        return matchBusqueda && matchTipo && matchCategoria;
+    });
 
     // 3. LOGICA CARRITO
     const agregarAlCarrito = (producto) => {
@@ -106,8 +126,21 @@ const POS = () => {
                 ...producto,
                 cantidad: 1,
                 precio_base_ancheta: producto.tipo === 'ANCHETA' ? parseFloat(producto.precio_venta) : 0,
-                componentes: []
+                margen_ancheta: 15, // Porcentaje de comisión predefinido al 15%
+                precio_servicio_ancheta: producto.tipo === 'ANCHETA' ? parseFloat(producto.precio_venta) : 0, // El valor que tendrá el "servicio" de la ancheta
+                componentes: producto.ingredientes ? producto.ingredientes.map(ing => ({
+                    producto_id: ing.producto_id,
+                    nombre: ing.nombre,
+                    precio_venta: parseFloat(ing.precio_venta),
+                    cantidad: ing.cantidad
+                })) : [],
+                kit_uuid: producto.tipo === 'ANCHETA' ? crypto.randomUUID() : null
             };
+
+            if (producto.tipo === 'ANCHETA') {
+                recalcularPreciosAncheta(nuevoItem);
+            }
+
             const nuevoCarrito = [...carrito, nuevoItem];
             setCarrito(nuevoCarrito);
 
@@ -119,17 +152,32 @@ const POS = () => {
         }
     };
 
+    const recalcularPreciosAncheta = (item) => {
+        const subtotalComponentes = item.componentes.reduce((acc, c) => acc + (c.precio_venta * c.cantidad), 0);
+
+        // El valor del servicio es: Precio Base + (Subtotal Componentes * Margen / 100)
+        const valorComision = Math.round(subtotalComponentes * (item.margen_ancheta / 100));
+        item.precio_servicio_ancheta = item.precio_base_ancheta + valorComision;
+
+        // El precio total visual de la ancheta (Componentes + Servicio)
+        const totalSinRedondear = subtotalComponentes + item.precio_servicio_ancheta;
+
+        // Redondeo hacia arriba al siguiente centenar (Ej: 10,101 -> 10,200)
+        const totalRedondeado = Math.ceil(totalSinRedondear / 100) * 100;
+
+        item.precio_venta = totalRedondeado;
+        item.precio_venta_original = totalSinRedondear; // Guardamos para mostrar el mensaje de redondeo
+    };
+
     const actualizarComponente = (prodComp, operacion) => {
         if (anchetaIndex === null) return;
 
         const nuevoCarrito = [...carrito];
         const item = nuevoCarrito[anchetaIndex];
-
         const indexComp = item.componentes.findIndex(c => c.producto_id === prodComp.id);
 
         if (operacion === 'SUMAR') {
             if (prodComp.stock <= 0) return alert("Componente sin stock");
-
             if (indexComp !== -1) {
                 item.componentes[indexComp].cantidad += 1;
             } else {
@@ -150,13 +198,19 @@ const POS = () => {
             }
         }
 
-        // RECALCULAR PRECIO DE LA ANCHETA
-        let nuevoTotalUnitario = item.precio_base_ancheta;
-        item.componentes.forEach(c => {
-            nuevoTotalUnitario += (c.precio_venta * c.cantidad);
-        });
-        item.precio_venta = nuevoTotalUnitario;
+        recalcularPreciosAncheta(item);
+        setCarrito(nuevoCarrito);
+    };
 
+    const actualizarMargenAncheta = (nuevoMargen) => {
+        if (anchetaIndex === null) return;
+        const nuevoCarrito = [...carrito];
+        const item = nuevoCarrito[anchetaIndex];
+
+        const val = parseFloat(nuevoMargen) || 0;
+        item.margen_ancheta = val < 0 ? 0 : val; // Evitar negativos
+
+        recalcularPreciosAncheta(item);
         setCarrito(nuevoCarrito);
     };
 
@@ -175,17 +229,47 @@ const POS = () => {
             return alert("⚠️ Estás visualizando inventario de OTRA Sede.\n\nPara vender, debes estar en la misma sede donde abriste caja.\nVuelve a seleccionar tu Sede original.");
         }
 
+        // Aplanar estructura Anchetas -> Backend espera lista plana con UUIDs
+        let detallesPayload = [];
+
+        carrito.forEach(item => {
+            if (item.tipo === 'ANCHETA') {
+                // 1. Agregar el "Servicio de Armado" / Padre
+                detallesPayload.push({
+                    producto_id: item.id,
+                    cantidad: item.cantidad,
+                    precio_unitario: item.precio_servicio_ancheta, // Valor dinámico del servicio
+                    kit_uuid: item.kit_uuid,
+                    porcentaje_comision: item.margen_ancheta
+                });
+
+                // 2. Agregar sus componentes (Item plano con mismo UUID)
+                item.componentes.forEach(comp => {
+                    detallesPayload.push({
+                        producto_id: comp.producto_id,
+                        cantidad: comp.cantidad * item.cantidad, // Multiplicar por cant de anchetas
+                        precio_unitario: comp.precio_venta,
+                        kit_uuid: item.kit_uuid,
+                        porcentaje_comision: item.margen_ancheta // Heredamos la comisión del padre
+                    });
+                });
+
+            } else {
+                // Producto normal
+                detallesPayload.push({
+                    producto_id: item.id,
+                    cantidad: item.cantidad,
+                    precio_unitario: item.precio_venta,
+                    kit_uuid: null
+                });
+            }
+        });
+
         const ventaData = {
             sesion_caja: sesionCajaId,
             metodo_pago: metodoPago,
-            detalles: carrito.map(item => ({
-                producto_id: item.id,
-                cantidad: item.cantidad,
-                componentes: item.tipo === 'ANCHETA' ? item.componentes.map(c => ({
-                    producto_id: c.producto_id,
-                    cantidad: c.cantidad
-                })) : []
-            }))
+            cliente_nombre: clienteNombre,
+            detalles: detallesPayload
         };
 
         try {
@@ -194,6 +278,7 @@ const POS = () => {
             if (response.status === 201) {
                 alert(`✅ ¡Venta registrada! Total: $${totalVenta.toLocaleString()}`);
                 setCarrito([]); // Limpiar carrito
+                setClienteNombre('Cliente General'); // Resetear nombre
 
                 // Recargar inventario
                 cargarProductos(sedeVisual);
@@ -242,12 +327,52 @@ const POS = () => {
                     <div className="mb-4">
                         <input
                             type="text"
-                            className="form-control form-control-lg"
+                            className="form-control form-control-lg shadow-sm"
+                            style={{ borderRadius: '15px', border: 'none' }}
                             placeholder="🔍 Buscar producto por nombre o código..."
                             value={busqueda}
                             onChange={(e) => setBusqueda(e.target.value)}
                             autoFocus
                         />
+                    </div>
+
+                    {/* FILTROS AVANZADOS */}
+                    <div className="row g-2 mb-4">
+                        <div className="col-lg-7 col-md-12">
+                            <label className="form-label small fw-bold text-muted mb-1 px-2">Filtrar por Tipo</label>
+                            <div className="d-flex gap-2" role="group">
+                                {[
+                                    { id: 'TODOS', label: 'Todo', icon: '🌐' },
+                                    { id: 'FISICO', label: 'Físicos', icon: '📦' },
+                                    { id: 'ANCHETA', label: 'Anchetas', icon: '🎁' },
+                                    { id: 'SERVICIO', label: 'Servicios', icon: '⚙️' }
+                                ].map(t => (
+                                    <button
+                                        key={t.id}
+                                        type="button"
+                                        className={`btn btn-sm flex-fill py-2 fw-bold border-0 shadow-sm transition-all ${filtroTipo === t.id ? 'btn-dark text-white' : 'btn-white bg-white text-muted'}`}
+                                        style={{ borderRadius: '12px' }}
+                                        onClick={() => setFiltroTipo(t.id)}
+                                    >
+                                        <span className="me-1">{t.icon}</span> {t.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="col-lg-5 col-md-12">
+                            <label className="form-label small fw-bold text-muted mb-1 px-2">Categoría</label>
+                            <select
+                                className="form-select form-select-sm shadow-sm py-2 border-0"
+                                style={{ borderRadius: '12px', cursor: 'pointer' }}
+                                value={filtroCategoria}
+                                onChange={(e) => setFiltroCategoria(e.target.value)}
+                            >
+                                <option value="TODAS">📁 Todas las categorías</option>
+                                {listaCategorias.map(cat => (
+                                    <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                     {cargando ? (
@@ -260,24 +385,75 @@ const POS = () => {
                             {productosFiltrados.map(prod => (
                                 <div key={prod.id} className="col-md-3 col-sm-4 col-6">
                                     <div
-                                        className={`card h-100 shadow-sm border-0 ${(prod.tipo !== 'SERVICIO' && prod.stock <= 0) ? 'opacity-50' : ''}`}
-                                        style={{ cursor: (prod.tipo === 'SERVICIO' || prod.stock > 0) ? 'pointer' : 'not-allowed' }}
-                                        onClick={() => (prod.tipo === 'SERVICIO' || prod.stock > 0) && agregarAlCarrito(prod)}
+                                        className={`card h-100 border-0 shadow-sm position-relative overflow-hidden ${(prod.tipo !== 'SERVICIO' && prod.tipo !== 'ANCHETA' && prod.stock <= 0) ? 'opacity-50' : ''}`}
+                                        style={{
+                                            cursor: (prod.tipo === 'SERVICIO' || prod.tipo === 'ANCHETA' || prod.stock > 0) ? 'pointer' : 'not-allowed',
+                                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                            borderRadius: '16px',
+                                            background: prod.tipo === 'ANCHETA'
+                                                ? 'linear-gradient(135deg, #fdfcfb 0%, #e2d1f9 100%)'
+                                                : prod.tipo === 'SERVICIO'
+                                                    ? 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
+                                                    : (prod.stock <= 0) ? '#f8f9fa' : '#ffffff'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (prod.tipo === 'SERVICIO' || prod.tipo === 'ANCHETA' || prod.stock > 0) {
+                                                e.currentTarget.style.transform = 'translateY(-8px)';
+                                                e.currentTarget.style.boxShadow = '0 15px 30px rgba(0,0,0,0.12)';
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.transform = 'translateY(0)';
+                                            e.currentTarget.style.boxShadow = '0 .125rem .25rem rgba(0,0,0,.075)';
+                                        }}
+                                        onClick={() => (prod.tipo === 'SERVICIO' || prod.tipo === 'ANCHETA' || prod.stock > 0) && agregarAlCarrito(prod)}
                                     >
-                                        <div className="card-body text-center p-2 d-flex flex-column justify-content-center">
-                                            <h6 className="card-title text-truncate" title={prod.nombre}>
-                                                {prod.nombre}
-                                            </h6>
-                                            <p className="card-text text-primary fw-bold mb-0">
-                                                ${parseFloat(prod.precio_venta).toLocaleString()}
-                                            </p>
-                                            {prod.tipo === 'SERVICIO' ? (
-                                                <small className="text-info fw-bold">Servicio</small>
+                                        <div className="card-body text-center p-3 d-flex flex-column align-items-center justify-content-between">
+                                            <div className="mb-2 w-100 text-center">
+                                                {prod.tipo === 'ANCHETA' ? (
+                                                    <span className="badge rounded-pill text-dark mb-2" style={{ backgroundColor: '#d1b3ff', fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.5px' }}>✨ PERSONALIZABLE</span>
+                                                ) : prod.tipo === 'SERVICIO' ? (
+                                                    <span className="badge rounded-pill text-dark mb-2" style={{ backgroundColor: '#b3e5fc', fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.5px' }}>⚙️ SERVICIO</span>
+                                                ) : (
+                                                    <span className="badge rounded-pill text-dark mb-2" style={{ backgroundColor: '#e0e0e0', fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.5px' }}>📦 FISICO</span>
+                                                )}
+                                                <h6 className="card-title fw-bold mb-1 px-1" style={{ color: '#2d3436', fontSize: '0.9rem', lineHeight: '1.2' }}>
+                                                    {prod.nombre}
+                                                </h6>
+                                            </div>
+
+                                            {prod.tipo !== 'ANCHETA' ? (
+                                                <div className="my-2">
+                                                    <span className="fs-4 fw-bold text-primary" style={{ letterSpacing: '-0.5px' }}>
+                                                        ${parseFloat(prod.precio_venta).toLocaleString()}
+                                                    </span>
+                                                </div>
                                             ) : (
-                                                <small className={prod.stock > 5 ? "text-success" : "text-danger"}>
-                                                    Stock: {prod.stock}
-                                                </small>
+                                                <div className="my-2 py-1">
+                                                    <span className="text-muted small fw-bold">Precios Dinámicos</span>
+                                                </div>
                                             )}
+
+                                            <div className="w-100 pt-2 border-top mt-auto">
+                                                {prod.tipo === 'SERVICIO' ? (
+                                                    <small className="text-secondary fw-bold">Servicios</small>
+                                                ) : prod.tipo === 'ANCHETA' ? (
+                                                    <small className="text-primary fw-bold">🎁 Crear Ancheta Nueva</small>
+                                                ) : (
+                                                    <div className="d-flex flex-column align-items-center">
+                                                        {prod.stock > 0 ? (
+                                                            <div className="d-flex align-items-center gap-2">
+                                                                <div className={`rounded-circle ${prod.stock > 5 ? 'bg-success' : 'bg-warning'}`} style={{ width: '10px', height: '10px', boxShadow: `0 0 5px ${prod.stock > 5 ? '#28a745' : '#fd7e14'}` }}></div>
+                                                                <small className={prod.stock > 5 ? "text-success fw-bold" : "text-warning fw-bold"}>
+                                                                    {prod.stock} disp.
+                                                                </small>
+                                                            </div>
+                                                        ) : (
+                                                            <small className="text-danger fw-bold">❌ Agotado</small>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -345,6 +521,18 @@ const POS = () => {
 
                     <div className="p-4 bg-light border-top">
                         <div className="mb-3">
+                            <label className="form-label fw-bold">Nombre del Cliente:</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Nombre (Opcional)"
+                                value={clienteNombre}
+                                onChange={(e) => setClienteNombre(e.target.value)}
+                                onFocus={(e) => e.target.value === 'Cliente General' && setClienteNombre('')}
+                            />
+                        </div>
+
+                        <div className="mb-3">
                             <label className="form-label fw-bold">Método de Pago:</label>
                             <select
                                 className="form-select"
@@ -403,10 +591,19 @@ const POS = () => {
                                             <table className="table table-hover table-sm">
                                                 <tbody>
                                                     {productos
-                                                        .filter(p => p.tipo === 'FISICO' && p.nombre.toLowerCase().includes(busquedaComp.toLowerCase()))
+                                                        .filter(p =>
+                                                            p.tipo === 'FISICO' && (
+                                                                p.nombre.toLowerCase().includes(busquedaComp.toLowerCase()) ||
+                                                                (p.codigo_interno && p.codigo_interno.toLowerCase().includes(busquedaComp.toLowerCase())) ||
+                                                                (p.codigo_barras && p.codigo_barras.toLowerCase().includes(busquedaComp.toLowerCase()))
+                                                            )
+                                                        )
                                                         .map(p => (
                                                             <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => actualizarComponente(p, 'SUMAR')}>
-                                                                <td>{p.nombre}</td>
+                                                                <td>
+                                                                    <strong>{p.nombre}</strong><br />
+                                                                    <small className="text-muted">{p.codigo_interno}</small>
+                                                                </td>
                                                                 <td className="text-primary fw-bold">${parseFloat(p.precio_venta).toLocaleString()}</td>
                                                                 <td><span className="badge bg-secondary">Stock: {p.stock}</span></td>
                                                             </tr>
@@ -437,8 +634,43 @@ const POS = () => {
                                                 ))}
                                             </ul>
                                         )}
-                                        <div className="mt-3 fs-5 text-end fw-bold text-success">
-                                            Subtotal Ancheta: ${parseFloat(carrito[anchetaIndex].precio_venta).toLocaleString()}
+                                        <div className="mt-auto border-top pt-3 bg-light p-3 rounded">
+                                            <div className="row align-items-center mb-2">
+                                                <div className="col-8">
+                                                    <label className="form-label small mb-0 fw-bold">Mano de Obra / Comisión (%)</label>
+                                                </div>
+                                                <div className="col-4">
+                                                    <div className="input-group input-group-sm">
+                                                        <input
+                                                            type="number"
+                                                            className="form-control"
+                                                            min="0"
+                                                            value={carrito[anchetaIndex].margen_ancheta}
+                                                            onChange={(e) => actualizarMargenAncheta(e.target.value)}
+                                                        />
+                                                        <span className="input-group-text">%</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="d-flex justify-content-between small text-muted mb-1">
+                                                <span>Subtotal Componentes:</span>
+                                                <span>${carrito[anchetaIndex].componentes.reduce((acc, c) => acc + (c.precio_venta * c.cantidad), 0).toLocaleString()}</span>
+                                            </div>
+                                            <div className="d-flex justify-content-between small text-muted mb-1">
+                                                <span>Valor Servicio (Base + Comis.):</span>
+                                                <span>${carrito[anchetaIndex].precio_servicio_ancheta.toLocaleString()}</span>
+                                            </div>
+                                            <div className="d-flex justify-content-between fs-4 fw-bold text-success border-top pt-2">
+                                                <span>Total Ancheta:</span>
+                                                <span>${parseFloat(carrito[anchetaIndex].precio_venta).toLocaleString()}</span>
+                                            </div>
+
+                                            {carrito[anchetaIndex].precio_venta > carrito[anchetaIndex].precio_venta_original && (
+                                                <div className="alert alert-info py-1 px-2 mt-2 mb-0" style={{ fontSize: '0.75rem' }}>
+                                                    ℹ️ Se aproximó el valor de <strong>${carrito[anchetaIndex].precio_venta_original.toLocaleString()}</strong> a <strong>${carrito[anchetaIndex].precio_venta.toLocaleString()}</strong>.
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

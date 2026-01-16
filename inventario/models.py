@@ -111,6 +111,7 @@ class MovimientoInventario(models.Model):
         ('ENTRADA', 'Entrada / Compra'), # Suma stock
         ('SALIDA', 'Salida / Ajuste / Pérdida'), # Resta stock (ej. robo, daño)
         ('TRASLADO', 'Traslado entre Sedes'), # Resta de Origen, Suma en Destino
+        ('VENTA', 'Venta al Público'), # Resta stock de la sede de venta
     )
 
     fecha = models.DateTimeField(auto_now_add=True)
@@ -137,8 +138,8 @@ class MovimientoInventario(models.Model):
         if self.tipo == 'TRASLADO' and self.sede_origen == self.sede_destino:
             raise ValidationError("La sede de origen y destino no pueden ser la misma.")
         
-        # Solo validamos si es SALIDA o TRASLADO (que son los que restan)
-        if self.tipo in ['SALIDA', 'TRASLADO']:
+        # Solo validamos si es SALIDA, VENTA o TRASLADO (que son los que restan)
+        if self.tipo in ['SALIDA', 'TRASLADO', 'VENTA']:
             # Buscamos si existe inventario en el origen
             inventario_origen = Inventario.objects.filter(
                 producto=self.producto, 
@@ -201,8 +202,8 @@ class MovimientoInventario(models.Model):
                 inv_origen.stock_actual += self.cantidad
                 inv_origen.save()
 
-            elif self.tipo == 'SALIDA':
-                # Para salida, el inventario DEBE existir (validado en clean)
+            elif self.tipo in ['SALIDA', 'VENTA']:
+                # Para salida o venta, el inventario DEBE existir (validado en clean)
                 inv_origen = Inventario.objects.get(producto=self.producto, sede=self.sede_origen)
                 inv_origen.stock_actual -= self.cantidad
                 inv_origen.save()
