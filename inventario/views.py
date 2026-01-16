@@ -176,7 +176,10 @@ class AdminInventarioGlobalView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Inventario.objects.all().select_related('producto', 'sede')
+        queryset = Inventario.objects.filter(
+            producto__tipo='FISICO'
+        ).select_related('producto', 'sede')
+        
         sede_id = self.request.query_params.get('sede_id')
         if sede_id:
             queryset = queryset.filter(sede_id=sede_id)

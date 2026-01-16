@@ -50,8 +50,8 @@ const InventoryMovements = () => {
     }, [busqueda]);
 
     const seleccionarProducto = (prod) => {
-        if (prod.tipo === 'SERVICIO') {
-            alert('🚫 No puedes gestionar inventario de un SERVICIO (Copia, Impresión, etc). Los servicios no manejan stock.');
+        if (prod.tipo === 'SERVICIO' || prod.tipo === 'ANCHETA') {
+            alert(`🚫 No puedes gestionar inventario de un ${prod.tipo}. Estos tipos de producto no manejan stock físico directo.`);
             return;
         }
         setProducto(prod);

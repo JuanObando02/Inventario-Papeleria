@@ -57,6 +57,7 @@ class DetalleVenta(models.Model):
     
     # Campo para agrupar items "sueltos" que pertenecen a una misma Ancheta dinámica
     id_agrupador_kit = models.CharField(max_length=50, null=True, blank=True, help_text="UUID para agrupar items de una misma ancheta")
+    porcentaje_comision = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text="Porcentaje de comisión/margen aplicado (especialmente para anchetas)")
 
     def save(self, *args, **kwargs):
         # Calculamos subtotal automáticamente antes de guardar
@@ -66,20 +67,3 @@ class DetalleVenta(models.Model):
     def __str__(self):
         return f"{self.cantidad} x {self.producto.nombre}"
 
-class DetalleVentaComponente(models.Model):
-    """ Registro histórico de los componentes que conformaron una Ancheta en una venta específica """
-    detalle_venta = models.ForeignKey(DetalleVenta, on_delete=models.CASCADE, related_name='componentes')
-    producto = models.ForeignKey(Producto, on_delete=models.PROTECT)
-    
-    cantidad = models.PositiveIntegerField()
-    
-    # Precio al que se vendió el componente individual dentro de la ancheta
-    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
-    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
-
-    def save(self, *args, **kwargs):
-        self.subtotal = self.cantidad * self.precio_unitario
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.cantidad} x {self.producto.nombre} (Componente de {self.detalle_venta})"

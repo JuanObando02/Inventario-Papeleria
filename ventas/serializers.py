@@ -1,13 +1,9 @@
 from rest_framework import serializers
 from django.db import transaction, models
 from django.utils import timezone
-from .models import Venta, DetalleVenta, SesionCaja, DetalleVentaComponente
+from .models import Venta, DetalleVenta, SesionCaja
 from inventario.models import Producto, Inventario, MovimientoInventario
 
-class ComponenteInputSerializer(serializers.Serializer):
-    """Estructura para los componentes de una Ancheta"""
-    producto_id = serializers.IntegerField()
-    cantidad = serializers.IntegerField(min_value=1)
 
 class DetalleVentaInputSerializer(serializers.Serializer):
     """Estructura simple para recibir los datos de cada item"""
@@ -16,8 +12,8 @@ class DetalleVentaInputSerializer(serializers.Serializer):
     precio_unitario = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     # Identificador para Agrupación Dinámica (Anchetas "al vuelo")
     kit_uuid = serializers.CharField(required=False, allow_null=True)
-    # Componentes opcionales para cuando se vende una ANCHETA (Legado/Estático)
-    componentes = ComponenteInputSerializer(many=True, required=False)
+    porcentaje_comision = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, default=0)
+
 
 class CrearVentaSerializer(serializers.ModelSerializer):
     detalles = DetalleVentaInputSerializer(many=True)
@@ -87,7 +83,8 @@ class CrearVentaSerializer(serializers.ModelSerializer):
                     cantidad=cantidad_items,
                     precio_unitario=precio_item,
                     subtotal=cantidad_items * precio_item,
-                    id_agrupador_kit=kit_uuid
+                    id_agrupador_kit=kit_uuid,
+                    porcentaje_comision=item.get('porcentaje_comision', 0)
                 )
 
                 total_acumulado += (cantidad_items * precio_item)

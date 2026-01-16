@@ -18,6 +18,7 @@ const POS = () => {
     const [listaSedes, setListaSedes] = useState([]);
 
     const [metodoPago, setMetodoPago] = useState('EFECTIVO');
+    const [clienteNombre, setClienteNombre] = useState('Cliente General');
 
     // Filtros
     const [filtroTipo, setFiltroTipo] = useState('TODOS');
@@ -125,11 +126,21 @@ const POS = () => {
                 ...producto,
                 cantidad: 1,
                 precio_base_ancheta: producto.tipo === 'ANCHETA' ? parseFloat(producto.precio_venta) : 0,
-                margen_ancheta: 0, // Porcentaje de comisión
+                margen_ancheta: 15, // Porcentaje de comisión predefinido al 15%
                 precio_servicio_ancheta: producto.tipo === 'ANCHETA' ? parseFloat(producto.precio_venta) : 0, // El valor que tendrá el "servicio" de la ancheta
-                componentes: [],
+                componentes: producto.ingredientes ? producto.ingredientes.map(ing => ({
+                    producto_id: ing.producto_id,
+                    nombre: ing.nombre,
+                    precio_venta: parseFloat(ing.precio_venta),
+                    cantidad: ing.cantidad
+                })) : [],
                 kit_uuid: producto.tipo === 'ANCHETA' ? crypto.randomUUID() : null
             };
+
+            if (producto.tipo === 'ANCHETA') {
+                recalcularPreciosAncheta(nuevoItem);
+            }
+
             const nuevoCarrito = [...carrito, nuevoItem];
             setCarrito(nuevoCarrito);
 
@@ -148,8 +159,14 @@ const POS = () => {
         const valorComision = Math.round(subtotalComponentes * (item.margen_ancheta / 100));
         item.precio_servicio_ancheta = item.precio_base_ancheta + valorComision;
 
-        // El precio total visual de la ancheta para el carrito es: Componentes + Servicio
-        item.precio_venta = subtotalComponentes + item.precio_servicio_ancheta;
+        // El precio total visual de la ancheta (Componentes + Servicio)
+        const totalSinRedondear = subtotalComponentes + item.precio_servicio_ancheta;
+
+        // Redondeo hacia arriba al siguiente centenar (Ej: 10,101 -> 10,200)
+        const totalRedondeado = Math.ceil(totalSinRedondear / 100) * 100;
+
+        item.precio_venta = totalRedondeado;
+        item.precio_venta_original = totalSinRedondear; // Guardamos para mostrar el mensaje de redondeo
     };
 
     const actualizarComponente = (prodComp, operacion) => {
@@ -190,7 +207,8 @@ const POS = () => {
         const nuevoCarrito = [...carrito];
         const item = nuevoCarrito[anchetaIndex];
 
-        item.margen_ancheta = parseFloat(nuevoMargen) || 0;
+        const val = parseFloat(nuevoMargen) || 0;
+        item.margen_ancheta = val < 0 ? 0 : val; // Evitar negativos
 
         recalcularPreciosAncheta(item);
         setCarrito(nuevoCarrito);
@@ -221,7 +239,8 @@ const POS = () => {
                     producto_id: item.id,
                     cantidad: item.cantidad,
                     precio_unitario: item.precio_servicio_ancheta, // Valor dinámico del servicio
-                    kit_uuid: item.kit_uuid
+                    kit_uuid: item.kit_uuid,
+                    porcentaje_comision: item.margen_ancheta
                 });
 
                 // 2. Agregar sus componentes (Item plano con mismo UUID)
@@ -230,7 +249,8 @@ const POS = () => {
                         producto_id: comp.producto_id,
                         cantidad: comp.cantidad * item.cantidad, // Multiplicar por cant de anchetas
                         precio_unitario: comp.precio_venta,
-                        kit_uuid: item.kit_uuid
+                        kit_uuid: item.kit_uuid,
+                        porcentaje_comision: item.margen_ancheta // Heredamos la comisión del padre
                     });
                 });
 
@@ -248,6 +268,7 @@ const POS = () => {
         const ventaData = {
             sesion_caja: sesionCajaId,
             metodo_pago: metodoPago,
+            cliente_nombre: clienteNombre,
             detalles: detallesPayload
         };
 
@@ -257,6 +278,7 @@ const POS = () => {
             if (response.status === 201) {
                 alert(`✅ ¡Venta registrada! Total: $${totalVenta.toLocaleString()}`);
                 setCarrito([]); // Limpiar carrito
+                setClienteNombre('Cliente General'); // Resetear nombre
 
                 // Recargar inventario
                 cargarProductos(sedeVisual);
@@ -499,6 +521,18 @@ const POS = () => {
 
                     <div className="p-4 bg-light border-top">
                         <div className="mb-3">
+                            <label className="form-label fw-bold">Nombre del Cliente:</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Nombre (Opcional)"
+                                value={clienteNombre}
+                                onChange={(e) => setClienteNombre(e.target.value)}
+                                onFocus={(e) => e.target.value === 'Cliente General' && setClienteNombre('')}
+                            />
+                        </div>
+
+                        <div className="mb-3">
                             <label className="form-label fw-bold">Método de Pago:</label>
                             <select
                                 className="form-select"
@@ -610,6 +644,7 @@ const POS = () => {
                                                         <input
                                                             type="number"
                                                             className="form-control"
+                                                            min="0"
                                                             value={carrito[anchetaIndex].margen_ancheta}
                                                             onChange={(e) => actualizarMargenAncheta(e.target.value)}
                                                         />
@@ -630,6 +665,12 @@ const POS = () => {
                                                 <span>Total Ancheta:</span>
                                                 <span>${parseFloat(carrito[anchetaIndex].precio_venta).toLocaleString()}</span>
                                             </div>
+
+                                            {carrito[anchetaIndex].precio_venta > carrito[anchetaIndex].precio_venta_original && (
+                                                <div className="alert alert-info py-1 px-2 mt-2 mb-0" style={{ fontSize: '0.75rem' }}>
+                                                    ℹ️ Se aproximó el valor de <strong>${carrito[anchetaIndex].precio_venta_original.toLocaleString()}</strong> a <strong>${carrito[anchetaIndex].precio_venta.toLocaleString()}</strong>.
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
