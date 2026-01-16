@@ -54,6 +54,9 @@ class DetalleVenta(models.Model):
     # Si el producto cambia de precio mañana, esta venta histórica no se altera.
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    # Campo para agrupar items "sueltos" que pertenecen a una misma Ancheta dinámica
+    id_agrupador_kit = models.CharField(max_length=50, null=True, blank=True, help_text="UUID para agrupar items de una misma ancheta")
 
     def save(self, *args, **kwargs):
         # Calculamos subtotal automáticamente antes de guardar

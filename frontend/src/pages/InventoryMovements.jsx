@@ -139,18 +139,30 @@ const InventoryMovements = () => {
                         {/* TIPO DE MOVIMIENTO */}
                         <div className="mb-3">
                             <label className="form-label fw-bold">Tipo de Movimiento</label>
-                            <div className="btn-group w-100" role="group">
-                                <input type="radio" className="btn-check" name="btnradio" id="btnEntrada"
-                                    autoComplete="off" checked={tipo === 'ENTRADA'} onChange={() => setTipo('ENTRADA')} />
-                                <label className="btn btn-outline-success" htmlFor="btnEntrada">📥 Entrada (Compra)</label>
+                            <div className="d-flex gap-3" role="group">
+                                <div className="flex-fill">
+                                    <input type="radio" className="btn-check" name="btnradio" id="btnEntrada"
+                                        autoComplete="off" checked={tipo === 'ENTRADA'} onChange={() => setTipo('ENTRADA')} />
+                                    <label className={`btn w-100 py-2 fw-bold ${tipo === 'ENTRADA' ? 'btn-success shadow-sm' : 'btn-outline-success'}`} htmlFor="btnEntrada">
+                                        📥 Entrada (Compra)
+                                    </label>
+                                </div>
 
-                                <input type="radio" className="btn-check" name="btnradio" id="btnSalida"
-                                    autoComplete="off" checked={tipo === 'SALIDA'} onChange={() => setTipo('SALIDA')} />
-                                <label className="btn btn-outline-danger" htmlFor="btnSalida">📤 Salida (Baja/Pérdida)</label>
+                                <div className="flex-fill">
+                                    <input type="radio" className="btn-check" name="btnradio" id="btnSalida"
+                                        autoComplete="off" checked={tipo === 'SALIDA'} onChange={() => setTipo('SALIDA')} />
+                                    <label className={`btn w-100 py-2 fw-bold ${tipo === 'SALIDA' ? 'btn-danger shadow-sm' : 'btn-outline-danger'}`} htmlFor="btnSalida">
+                                        📤 Salida (Baja/Pérdida)
+                                    </label>
+                                </div>
 
-                                <input type="radio" className="btn-check" name="btnradio" id="btnTraslado"
-                                    autoComplete="off" checked={tipo === 'TRASLADO'} onChange={() => setTipo('TRASLADO')} />
-                                <label className="btn btn-outline-primary" htmlFor="btnTraslado">🚚 Traslado entre Sedes</label>
+                                <div className="flex-fill">
+                                    <input type="radio" className="btn-check" name="btnradio" id="btnTraslado"
+                                        autoComplete="off" checked={tipo === 'TRASLADO'} onChange={() => setTipo('TRASLADO')} />
+                                    <label className={`btn w-100 py-2 fw-bold ${tipo === 'TRASLADO' ? 'btn-primary shadow-sm' : 'btn-outline-primary'}`} htmlFor="btnTraslado">
+                                        🚚 Traslado entre Sedes
+                                    </label>
+                                </div>
                             </div>
                         </div>
 

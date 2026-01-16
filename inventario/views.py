@@ -46,10 +46,10 @@ class ListarProductosPOS(generics.ListAPIView):
         self.sede_target = sede_target
 
         # 2. Filtrar Productos: 
-        # Traemos productos con stock en la sede OR que sean SERVICIOS (globales)
+        # Traemos productos con stock en la sede OR que sean SERVICIOS o ANCHETAS (globales/sin stock propio)
         return Producto.objects.filter(
             Q(inventarios__sede=sede_target, inventarios__stock_actual__gt=0) |
-            Q(tipo='SERVICIO')
+            Q(tipo__in=['SERVICIO', 'ANCHETA'])
         ).distinct()
 
     def get_serializer_context(self):

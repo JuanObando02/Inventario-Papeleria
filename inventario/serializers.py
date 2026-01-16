@@ -10,7 +10,7 @@ class ProductoPOSSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'nombre', 'precio_venta', 
             'codigo_barras', 'codigo_interno', 
-            'tipo', 'stock'
+            'tipo', 'stock', 'categoria'
         ]
 
     def get_stock(self, obj):

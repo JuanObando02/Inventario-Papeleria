@@ -126,7 +126,7 @@ const CreateProduct = () => {
             // Recargar categorias
             const res = await api.get('inventario/categorias/');
             setCategorias(res.data);
-            
+
             // Auto seleccionar la nueva (la buscamos por nombre, simple logic)
             const nueva = res.data.find(c => c.nombre === nombreCat);
             if (nueva) setCategoria(nueva.id);
@@ -155,12 +155,7 @@ const CreateProduct = () => {
             activo: true
         };
 
-        if (tipo === 'ANCHETA') {
-            if (ingredientes.length === 0) {
-                alert("Debes agregar al menos un producto al Kit/Ancheta.");
-                setLoading(false);
-                return;
-            }
+        if (tipo === 'ANCHETA' && ingredientes.length > 0) {
             payload.ingredientes = ingredientes.map(i => ({
                 producto_hijo_id: i.producto_hijo,
                 cantidad: i.cantidad
@@ -244,10 +239,10 @@ const CreateProduct = () => {
                                 <label className="form-label fw-bold">Categoría</label>
                                 <div className="input-group">
                                     <select className="form-select" value={categoria} onChange={e => setCategoria(e.target.value)}>
-                                    <option value="">Sin Categoría</option>
-                                    {categorias.map(c => (
-                                        <option key={c.id} value={c.id}>{c.nombre}</option>
-                                    ))}
+                                        <option value="">Sin Categoría</option>
+                                        {categorias.map(c => (
+                                            <option key={c.id} value={c.id}>{c.nombre}</option>
+                                        ))}
                                     </select>
                                     <button type="button" className="btn btn-outline-primary" onClick={handleCrearCategoria} title="Crear Nueva Categoría">
                                         +
