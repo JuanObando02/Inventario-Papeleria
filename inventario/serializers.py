@@ -1,4 +1,4 @@
-from .models import Producto, Inventario
+from .models import Producto, Inventario, Categoria
 from rest_framework import serializers
 from django.db import transaction
 
@@ -104,6 +104,11 @@ class RecetaAnchetaSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecetaAncheta
         fields = ['producto_hijo_id', 'cantidad']
+
+class CrearCategoriaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Categoria
+        fields = ['id', 'nombre']
 
 class ProductoCreateSerializer(serializers.ModelSerializer):
     ingredientes = RecetaAnchetaSerializer(many=True, required=False, write_only=True)

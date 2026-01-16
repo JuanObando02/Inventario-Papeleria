@@ -116,6 +116,27 @@ const CreateProduct = () => {
             });
     };
 
+    const handleCrearCategoria = async () => {
+        const nombreCat = prompt("Ingresa el nombre de la nueva categoría:");
+        if (!nombreCat) return;
+
+        try {
+            await api.post('inventario/admin/crear-categoria/', { nombre: nombreCat });
+            alert("Categoría creada con éxito!");
+            // Recargar categorias
+            const res = await api.get('inventario/categorias/');
+            setCategorias(res.data);
+            
+            // Auto seleccionar la nueva (la buscamos por nombre, simple logic)
+            const nueva = res.data.find(c => c.nombre === nombreCat);
+            if (nueva) setCategoria(nueva.id);
+
+        } catch (error) {
+            console.error(error);
+            alert("Error al crear categoría: " + (error.response?.data?.error || "Error desconocido"));
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -221,12 +242,17 @@ const CreateProduct = () => {
                             </div>
                             <div className="col-md-4">
                                 <label className="form-label fw-bold">Categoría</label>
-                                <select className="form-select" value={categoria} onChange={e => setCategoria(e.target.value)}>
+                                <div className="input-group">
+                                    <select className="form-select" value={categoria} onChange={e => setCategoria(e.target.value)}>
                                     <option value="">Sin Categoría</option>
                                     {categorias.map(c => (
                                         <option key={c.id} value={c.id}>{c.nombre}</option>
                                     ))}
-                                </select>
+                                    </select>
+                                    <button type="button" className="btn btn-outline-primary" onClick={handleCrearCategoria} title="Crear Nueva Categoría">
+                                        +
+                                    </button>
+                                </div>
                             </div>
                             <div className="col-md-4">
                                 <label className="form-label fw-bold">Unidad de Medida</label>

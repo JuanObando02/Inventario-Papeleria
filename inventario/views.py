@@ -143,7 +143,7 @@ class BuscarProductoAdminView(generics.ListAPIView):
             Q(codigo_interno__icontains=query)
         )[:15]
 
-from .serializers import MovimientoInventarioSerializer
+from .serializers import MovimientoInventarioSerializer, CrearCategoriaSerializer
 
 class RegistrarMovimientoView(generics.CreateAPIView):
     """
@@ -244,6 +244,30 @@ class ListarCategoriasView(generics.ListAPIView):
     def list(self, request, *args, **kwargs):
         data = self.get_queryset().values('id', 'nombre')
         return Response(list(data))
+
+class CrearCategoriaView(generics.CreateAPIView):
+    """
+    """
+    serializer_class = CrearCategoriaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        # Validar que sea ADMIN
+        if not hasattr(self.request.user, 'perfil') or self.request.user.perfil.rol != 'ADMIN':
+             raise ValidationError("Solo los administradores pueden crear categorías.")
+        
+        serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        try:
+             return super().create(request, *args, **kwargs)
+        except ValidationError as e:
+             return Response({"error": e.messages}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+             # Capturar error de unique (categoria repetida)
+             if "unique constraint" in str(e).lower():
+                  return Response({"error": "Esta categoría ya existe."}, status=status.HTTP_400_BAD_REQUEST)
+             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 from .serializers import ProductoCreateSerializer
 

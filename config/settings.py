@@ -139,7 +139,9 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
-print(f"VALOR DEL ENV: {os.getenv('PROBANDO_ENV')}")
+print(f"VALOR DEL ENV: {os.getenv('PROBANDO_ENV')}") 
+ 
+ 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 if not DEBUG:
