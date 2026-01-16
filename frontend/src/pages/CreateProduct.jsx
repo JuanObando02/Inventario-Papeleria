@@ -102,6 +102,41 @@ const CreateProduct = () => {
         }
     }, [precioCosto, margen]);
 
+    // Generate Next Code Logic
+    const generarCodigo = () => {
+        // No bloqueamos con lading global para que no parezca que se congela todo,
+        // pero podriamos poner un mini spinner si fuera lento.
+        api.get('inventario/admin/generar-codigo/')
+            .then(res => {
+                setCodigoInterno(res.data.siguiente_codigo);
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Error al generar el código");
+            });
+    };
+
+    const handleCrearCategoria = async () => {
+        const nombreCat = prompt("Ingresa el nombre de la nueva categoría:");
+        if (!nombreCat) return;
+
+        try {
+            await api.post('inventario/admin/crear-categoria/', { nombre: nombreCat });
+            alert("Categoría creada con éxito!");
+            // Recargar categorias
+            const res = await api.get('inventario/categorias/');
+            setCategorias(res.data);
+
+            // Auto seleccionar la nueva (la buscamos por nombre, simple logic)
+            const nueva = res.data.find(c => c.nombre === nombreCat);
+            if (nueva) setCategoria(nueva.id);
+
+        } catch (error) {
+            console.error(error);
+            alert("Error al crear categoría: " + (error.response?.data?.error || "Error desconocido"));
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -120,12 +155,7 @@ const CreateProduct = () => {
             activo: true
         };
 
-        if (tipo === 'ANCHETA') {
-            if (ingredientes.length === 0) {
-                alert("Debes agregar al menos un producto al Kit/Ancheta.");
-                setLoading(false);
-                return;
-            }
+        if (tipo === 'ANCHETA' && ingredientes.length > 0) {
             payload.ingredientes = ingredientes.map(i => ({
                 producto_hijo_id: i.producto_hijo,
                 cantidad: i.cantidad
@@ -177,7 +207,12 @@ const CreateProduct = () => {
                             </div>
                             <div className="col-md-3">
                                 <label className="form-label fw-bold">Código Interno / PLU</label>
-                                <input type="text" className="form-control" required value={codigoInterno} onChange={e => setCodigoInterno(e.target.value)} />
+                                <div className="input-group">
+                                    <input type="text" className="form-control" required value={codigoInterno} onChange={e => setCodigoInterno(e.target.value)} />
+                                    <button type="button" className="btn btn-outline-secondary" onClick={generarCodigo} title="Generar Siguiente Código">
+                                        ⚡ Auto
+                                    </button>
+                                </div>
                             </div>
                             <div className="col-md-3">
                                 <label className="form-label fw-bold">Código de Barras</label>
@@ -202,12 +237,17 @@ const CreateProduct = () => {
                             </div>
                             <div className="col-md-4">
                                 <label className="form-label fw-bold">Categoría</label>
-                                <select className="form-select" value={categoria} onChange={e => setCategoria(e.target.value)}>
-                                    <option value="">Sin Categoría</option>
-                                    {categorias.map(c => (
-                                        <option key={c.id} value={c.id}>{c.nombre}</option>
-                                    ))}
-                                </select>
+                                <div className="input-group">
+                                    <select className="form-select" value={categoria} onChange={e => setCategoria(e.target.value)}>
+                                        <option value="">Sin Categoría</option>
+                                        {categorias.map(c => (
+                                            <option key={c.id} value={c.id}>{c.nombre}</option>
+                                        ))}
+                                    </select>
+                                    <button type="button" className="btn btn-outline-primary" onClick={handleCrearCategoria} title="Crear Nueva Categoría">
+                                        +
+                                    </button>
+                                </div>
                             </div>
                             <div className="col-md-4">
                                 <label className="form-label fw-bold">Unidad de Medida</label>

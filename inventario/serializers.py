@@ -1,16 +1,26 @@
-from .models import Producto, Inventario
+from .models import Producto, Inventario, Categoria, RecetaAncheta
 from rest_framework import serializers
 from django.db import transaction
 
+class RecetaSerializer(serializers.ModelSerializer):
+    producto_id = serializers.ReadOnlyField(source='producto_hijo.id')
+    nombre = serializers.ReadOnlyField(source='producto_hijo.nombre')
+    precio_venta = serializers.ReadOnlyField(source='producto_hijo.precio_venta')
+
+    class Meta:
+        model = RecetaAncheta
+        fields = ['producto_id', 'nombre', 'precio_venta', 'cantidad']
+
 class ProductoPOSSerializer(serializers.ModelSerializer):
     stock = serializers.SerializerMethodField()
+    ingredientes = RecetaSerializer(many=True, read_only=True)
 
     class Meta:
         model = Producto
         fields = [
             'id', 'nombre', 'precio_venta', 
             'codigo_barras', 'codigo_interno', 
-            'tipo', 'stock'
+            'tipo', 'stock', 'categoria', 'ingredientes'
         ]
 
     def get_stock(self, obj):
@@ -104,6 +114,11 @@ class RecetaAnchetaSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecetaAncheta
         fields = ['producto_hijo_id', 'cantidad']
+
+class CrearCategoriaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Categoria
+        fields = ['id', 'nombre']
 
 class ProductoCreateSerializer(serializers.ModelSerializer):
     ingredientes = RecetaAnchetaSerializer(many=True, required=False, write_only=True)
