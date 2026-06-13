@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 const OpenBox = () => {
     const [monto, setMonto] = useState('');
@@ -11,23 +11,23 @@ const OpenBox = () => {
     const { user } = useAuth();
 
     useEffect(() => {
+        const fetchSedes = async () => {
+            try {
+                const res = await api.get('inventario/sedes/');
+                setSedes(res.data);
+                if (res.data.length > 0) {
+                    // Pre-seleccionar la primera
+                    setSelectedSede(res.data[0].id);
+                }
+            } catch (error) {
+                console.error("Error cargando sedes", error);
+            }
+        };
+
         if (user?.rol === 'ADMIN') {
             fetchSedes();
         }
     }, [user]);
-
-    const fetchSedes = async () => {
-        try {
-            const res = await api.get('inventario/sedes/');
-            setSedes(res.data);
-            if (res.data.length > 0) {
-                // Pre-seleccionar la primera
-                setSelectedSede(res.data[0].id);
-            }
-        } catch (error) {
-            console.error("Error cargando sedes", error);
-        }
-    };
 
     const handleAbrir = async (e) => {
         e.preventDefault();

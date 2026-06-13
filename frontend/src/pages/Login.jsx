@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import api from '../api/axios'; // Importamos nuestro comunicador
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 const Login = () => {
     const [username, setUsername] = useState('');

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 const CloseBox = () => {
     const navigate = useNavigate();
-    const { logout } = useAuth();
+    const { logout, user } = useAuth();
 
     const [caja, setCaja] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -88,7 +88,7 @@ const CloseBox = () => {
                 <h3 className="text-center mb-4">🔒 Cerrar Turno</h3>
 
                 <div className="alert alert-info">
-                    <p className="mb-0"><strong>Usuario:</strong> {useAuth().user?.username}</p>
+                    <p className="mb-0"><strong>Usuario:</strong> {user?.username}</p>
                 </div>
 
                 <form onSubmit={handleCerrar}>

@@ -1,31 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import api from '../api/axios';
 
 const MainMenu = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const [validando, setValidando] = useState(true);
+    const [resumen, setResumen] = useState(null);
 
-    // Al entrar al menú, verificamos si TIENE CAJA
-    // codigo para verificar si el usuario tiene caja abierta
+    // Al entrar al menú, cargamos el resumen del día (incluye estado de caja)
     useEffect(() => {
-        const verificarCaja = async () => { //funcion asincrona que verifica si el usuario tiene caja abierta
+        const cargarResumen = async () => {
             try {
-                const res = await api.get('ventas/estado-caja/'); //hace una peticion GET a la api para verificar si el usuario tiene caja abierta
-                if (!res.data.abierta && user?.rol !== 'ADMIN') {
+                const res = await api.get('ventas/dashboard/');
+                setResumen(res.data);
+                if (!res.data.caja.abierta && user?.rol !== 'ADMIN') {
                     // Si NO tiene caja abierta y no es admin, lo mandamos a abrirla
                     navigate('/apertura-caja');
                 }
             } catch (error) {
-                console.error("Error verificando caja", error);
+                console.error("Error cargando resumen", error);
             } finally {
                 setValidando(false);
             }
         };
-        verificarCaja();
-    }, [navigate]);
+        cargarResumen();
+    }, [navigate, user?.rol]);
 
     if (validando) return <div className="text-center mt-5"><div className="spinner-border"></div></div>;
 
@@ -43,6 +44,61 @@ const MainMenu = () => {
                     Cerrar Sesión
                 </button>
             </div>
+
+            {/* RESUMEN DEL DÍA */}
+            {resumen && (
+                <div className="row g-3 mb-4">
+                    <div className="col-md-4">
+                        <div className="card border-0 shadow-sm h-100">
+                            <div className="card-body d-flex align-items-center gap-3">
+                                <span className="fs-1">💰</span>
+                                <div>
+                                    <div className="text-muted small">Ventas de hoy {user?.rol !== 'ADMIN' ? '(tu sede)' : '(todas las sedes)'}</div>
+                                    <div className="fs-4 fw-bold">${parseFloat(resumen.ventas_hoy.total).toLocaleString()}</div>
+                                    <div className="text-muted small">{resumen.ventas_hoy.numero} ventas</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="col-md-4">
+                        <div
+                            className="card border-0 shadow-sm h-100"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => navigate('/alertas-stock')}
+                        >
+                            <div className="card-body d-flex align-items-center gap-3">
+                                <span className="fs-1">⚠️</span>
+                                <div>
+                                    <div className="text-muted small">Alertas de stock</div>
+                                    <div className="fs-4 fw-bold">
+                                        {resumen.alertas_stock}
+                                        {resumen.alertas_stock > 0 && <span className="badge bg-danger ms-2 align-middle">Reponer</span>}
+                                    </div>
+                                    <div className="text-muted small">productos en o bajo el mínimo</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="col-md-4">
+                        <div className="card border-0 shadow-sm h-100">
+                            <div className="card-body d-flex align-items-center gap-3">
+                                <span className="fs-1">{resumen.caja.abierta ? '🔓' : '🔒'}</span>
+                                <div>
+                                    <div className="text-muted small">Tu caja</div>
+                                    {resumen.caja.abierta ? (
+                                        <>
+                                            <div className="fs-4 fw-bold text-success">Abierta</div>
+                                            <div className="text-muted small">Saldo: ${parseFloat(resumen.caja.saldo).toLocaleString()}</div>
+                                        </>
+                                    ) : (
+                                        <div className="fs-4 fw-bold text-secondary">Cerrada</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="row g-4">
                 {/* OPCIÓN 1: Registrar Venta */}
@@ -96,6 +152,22 @@ const MainMenu = () => {
                     </div>
                 </div>
 
+                {/* OPCIÓN 4: Reposición de Stock */}
+                <div className="col-md-4">
+                    <div className="card h-100 border-0 shadow-hover card-hover">
+                        <div className="card-body p-4 text-center">
+                            <div className="rounded-circle bg-warning bg-opacity-10 d-inline-flex p-3 mb-3">
+                                <span className="display-4">⚠️</span>
+                            </div>
+                            <h3 className="fw-bold" style={{ color: '#d97706' }}>Reposición</h3>
+                            <p className="text-muted">Productos con stock bajo que necesitan reabastecimiento.</p>
+                            <button className="btn btn-outline-warning w-100 py-2 rounded-pill" onClick={() => navigate('/alertas-stock')}>
+                                Ver Alertas de Stock
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 {/* SECCIÓN ADMINISTRATIVA INTEGRADA */}
                 {user?.rol === 'ADMIN' && (
                     <div className="col-12 mt-5">
@@ -108,6 +180,12 @@ const MainMenu = () => {
                                     <Link to="/admin/crear-producto" className="btn btn-success w-100 text-white d-flex flex-column align-items-center p-3 gap-2">
                                         <span className="fs-3">✨</span>
                                         <span>Crear Producto</span>
+                                    </Link>
+                                </div>
+                                <div className="col-md-3">
+                                    <Link to="/admin/editar-producto" className="btn btn-warning w-100 d-flex flex-column align-items-center p-3 gap-2">
+                                        <span className="fs-3">✏️</span>
+                                        <span>Editar Producto</span>
                                     </Link>
                                 </div>
                                 <div className="col-md-3">
@@ -126,6 +204,12 @@ const MainMenu = () => {
                                     <Link to="/admin/reportes" className="btn btn-primary w-100 d-flex flex-column align-items-center p-3 gap-2">
                                         <span className="fs-3">📊</span>
                                         <span>Reportes de Cierre</span>
+                                    </Link>
+                                </div>
+                                <div className="col-md-3">
+                                    <Link to="/admin/reportes-ventas" className="btn btn-success w-100 text-white d-flex flex-column align-items-center p-3 gap-2">
+                                        <span className="fs-3">📈</span>
+                                        <span>Reporte de Ventas</span>
                                     </Link>
                                 </div>
                                 <div className="col-12 mt-4 text-center">

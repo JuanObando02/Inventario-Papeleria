@@ -1,32 +1,28 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { useState } from 'react';
 import api from '../api/axios';
+import { AuthContext } from './useAuth';
 
-const AuthContext = createContext();
+// Lee la sesión guardada en localStorage (si existe) una sola vez al montar
+const leerSesionGuardada = () => {
+    const storedToken = localStorage.getItem('token');
+    if (!storedToken) return null;
+
+    // Configurar Axios para que siempre envíe el token
+    api.defaults.headers.common['Authorization'] = `Token ${storedToken}`;
+
+    const storedSedeId = localStorage.getItem('user_sede_id');
+    return {
+        username: localStorage.getItem('username'),
+        rol: localStorage.getItem('user_role'),
+        sede_id: storedSedeId ? parseInt(storedSedeId) : null,
+        sede_nombre: localStorage.getItem('user_sede_nombre')
+    };
+};
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    // Al cargar la app, revisamos si ya había un token guardado
-    useEffect(() => {
-        const storedToken = localStorage.getItem('token');
-        const storedUser = localStorage.getItem('username');
-        const storedRole = localStorage.getItem('user_role');
-        const storedSedeId = localStorage.getItem('user_sede_id');
-        const storedSedeNombre = localStorage.getItem('user_sede_nombre');
-
-        if (storedToken) {
-            // Configurar Axios para que siempre envíe el token
-            api.defaults.headers.common['Authorization'] = `Token ${storedToken}`;
-            setUser({
-                username: storedUser,
-                rol: storedRole,
-                sede_id: storedSedeId ? parseInt(storedSedeId) : null,
-                sede_nombre: storedSedeNombre
-            });
-        }
-        setLoading(false);
-    }, []);// almontar useEffect 
+    // Inicialización perezosa: se carga de forma síncrona, sin useEffect ni render extra
+    const [user, setUser] = useState(leerSesionGuardada);
+    const loading = false; // la sesión se resuelve de forma síncrona
 
     // Función para Iniciar Sesión (Ahora recibe extraData con rol y sede)
     const login = (token, username, userId, extraData = {}) => {
@@ -69,5 +65,3 @@ export const AuthProvider = ({ children }) => {
         </AuthContext.Provider>
     );
 };
-
-export const useAuth = () => useContext(AuthContext);

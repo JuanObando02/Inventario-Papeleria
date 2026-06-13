@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 const InventoryMovements = () => {
     const { user } = useAuth();
@@ -25,6 +25,66 @@ const InventoryMovements = () => {
     // UI Helpers
     const [loading, setLoading] = useState(false);
     const [mensaje, setMensaje] = useState(null);
+    const [pestana, setPestana] = useState('registrar'); // 'registrar' | 'historial'
+
+    // Estado del Historial
+    const [movimientos, setMovimientos] = useState([]);
+    const [totalMovimientos, setTotalMovimientos] = useState(0);
+    const [loadingHistorial, setLoadingHistorial] = useState(false);
+    const [filtroQ, setFiltroQ] = useState('');
+    const [filtroSede, setFiltroSede] = useState('');
+    const [filtroTipo, setFiltroTipo] = useState('');
+    const [filtroDesde, setFiltroDesde] = useState('');
+    const [filtroHasta, setFiltroHasta] = useState('');
+
+    const LIMITE = 25;
+
+    const construirUrlHistorial = (offset) => {
+        let url = `inventario/movimientos/?limit=${LIMITE}&offset=${offset}`;
+        if (filtroQ.trim()) url += `&q=${encodeURIComponent(filtroQ.trim())}`;
+        if (filtroSede) url += `&sede_id=${filtroSede}`;
+        if (filtroTipo) url += `&tipo=${filtroTipo}`;
+        if (filtroDesde) url += `&desde=${filtroDesde}`;
+        if (filtroHasta) url += `&hasta=${filtroHasta}`;
+        return url;
+    };
+
+    // Cargar historial (con debounce para el texto)
+    useEffect(() => {
+        if (pestana !== 'historial') return;
+        const timeoutId = setTimeout(async () => {
+            setLoadingHistorial(true);
+            try {
+                const res = await api.get(construirUrlHistorial(0));
+                setMovimientos(res.data.results);
+                setTotalMovimientos(res.data.count);
+            } catch (error) {
+                console.error("Error cargando historial", error);
+            } finally {
+                setLoadingHistorial(false);
+            }
+        }, 500);
+        return () => clearTimeout(timeoutId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pestana, filtroQ, filtroSede, filtroTipo, filtroDesde, filtroHasta]);
+
+    const cargarMas = async () => {
+        setLoadingHistorial(true);
+        try {
+            const res = await api.get(construirUrlHistorial(movimientos.length));
+            setMovimientos([...movimientos, ...res.data.results]);
+            setTotalMovimientos(res.data.count);
+        } catch (error) {
+            console.error("Error cargando más movimientos", error);
+        } finally {
+            setLoadingHistorial(false);
+        }
+    };
+
+    const badgeTipo = (t) => {
+        const colores = { ENTRADA: 'bg-success', SALIDA: 'bg-danger', TRASLADO: 'bg-primary', VENTA: 'bg-secondary' };
+        return <span className={`badge ${colores[t] || 'bg-dark'}`}>{t}</span>;
+    };
 
     // 1. Cargar Sedes
     useEffect(() => {
@@ -121,7 +181,123 @@ const InventoryMovements = () => {
                 <button className="btn btn-secondary" onClick={() => navigate('/menu')}>Volver al Menú</button>
             </div>
 
-            <div className="card shadow">
+            {/* PESTAÑAS */}
+            <ul className="nav nav-tabs mb-3">
+                <li className="nav-item">
+                    <button className={`nav-link ${pestana === 'registrar' ? 'active' : ''}`} onClick={() => setPestana('registrar')}>
+                        📝 Registrar
+                    </button>
+                </li>
+                <li className="nav-item">
+                    <button className={`nav-link ${pestana === 'historial' ? 'active' : ''}`} onClick={() => setPestana('historial')}>
+                        📜 Historial
+                    </button>
+                </li>
+            </ul>
+
+            {pestana === 'historial' && (
+                <>
+                    {/* FILTROS HISTORIAL */}
+                    <div className="card shadow-sm mb-3">
+                        <div className="card-body">
+                            <div className="row g-3">
+                                <div className="col-md-4">
+                                    <label className="form-label fw-bold">Producto</label>
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        placeholder="🔍 Nombre o código..."
+                                        value={filtroQ}
+                                        onChange={(e) => setFiltroQ(e.target.value)}
+                                    />
+                                </div>
+                                <div className="col-md-2">
+                                    <label className="form-label fw-bold">Sede</label>
+                                    <select className="form-select" value={filtroSede} onChange={(e) => setFiltroSede(e.target.value)}>
+                                        <option value="">Todas</option>
+                                        {sedes.map(s => (
+                                            <option key={s.id} value={s.id}>{s.nombre}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="col-md-2">
+                                    <label className="form-label fw-bold">Tipo</label>
+                                    <select className="form-select" value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
+                                        <option value="">Todos</option>
+                                        <option value="ENTRADA">Entrada</option>
+                                        <option value="SALIDA">Salida</option>
+                                        <option value="TRASLADO">Traslado</option>
+                                        <option value="VENTA">Venta</option>
+                                    </select>
+                                </div>
+                                <div className="col-md-2">
+                                    <label className="form-label fw-bold">Desde</label>
+                                    <input type="date" className="form-control" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} />
+                                </div>
+                                <div className="col-md-2">
+                                    <label className="form-label fw-bold">Hasta</label>
+                                    <input type="date" className="form-control" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* TABLA HISTORIAL */}
+                    <div className="card shadow">
+                        <div className="card-body p-0">
+                            <div className="table-responsive" style={{ maxHeight: '600px' }}>
+                                <table className="table table-hover table-striped align-middle mb-0">
+                                    <thead className="table-dark sticky-top">
+                                        <tr>
+                                            <th>Fecha</th>
+                                            <th>Tipo</th>
+                                            <th>Producto</th>
+                                            <th className="text-center">Cant.</th>
+                                            <th>Origen</th>
+                                            <th>Destino</th>
+                                            <th>Usuario</th>
+                                            <th>Motivo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {movimientos.length === 0 && !loadingHistorial ? (
+                                            <tr>
+                                                <td colSpan="8" className="text-center py-5">No hay movimientos con estos filtros.</td>
+                                            </tr>
+                                        ) : (
+                                            movimientos.map(m => (
+                                                <tr key={m.id}>
+                                                    <td className="small">{new Date(m.fecha).toLocaleString()}</td>
+                                                    <td>{badgeTipo(m.tipo)}</td>
+                                                    <td className="fw-bold">{m.producto_nombre} <small className="text-muted">({m.codigo_interno})</small></td>
+                                                    <td className="text-center">{m.cantidad}</td>
+                                                    <td><span className="badge bg-light text-dark border">{m.sede_origen_nombre}</span></td>
+                                                    <td>{m.sede_destino_nombre ? <span className="badge bg-light text-dark border">{m.sede_destino_nombre}</span> : '—'}</td>
+                                                    <td className="small">{m.usuario_nombre}</td>
+                                                    <td className="small text-muted">{m.motivo}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div className="card-footer text-center">
+                            {loadingHistorial ? (
+                                <div className="spinner-border spinner-border-sm"></div>
+                            ) : movimientos.length < totalMovimientos ? (
+                                <button className="btn btn-outline-primary btn-sm" onClick={cargarMas}>
+                                    Cargar más ({movimientos.length} de {totalMovimientos})
+                                </button>
+                            ) : (
+                                <span className="text-muted small">{totalMovimientos} movimientos en total</span>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
+
+            <div className="card shadow" style={pestana === 'registrar' ? {} : { display: 'none' }}>
                 <div className="card-header bg-primary text-white">
                     <h5 className="mb-0">Registrar Movimiento</h5>
                 </div>
