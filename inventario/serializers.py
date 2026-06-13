@@ -80,6 +80,7 @@ class MovimientoInventarioSerializer(serializers.ModelSerializer):
         return data
 
 class InventarioGlobalSerializer(serializers.ModelSerializer):
+    
     producto_nombre = serializers.ReadOnlyField(source='producto.nombre')
     producto_tipo = serializers.ReadOnlyField(source='producto.tipo')
     producto_costo = serializers.ReadOnlyField(source='producto.precio_costo')

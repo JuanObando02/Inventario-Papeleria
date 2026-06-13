@@ -12,7 +12,8 @@ class PerfilUsuario(models.Model):
     sede = models.ForeignKey(Sede, on_delete=models.PROTECT, null=True, blank=True)
     rol = models.CharField(max_length=15, choices=ROLES, default='EMPLEADO')
     
-    # Otros datos: telefono, cargo, etc.
+    class Meta:
+        app_label = 'usuarios'
+
     def __str__(self):
         return f"{self.usuario.username} ({self.get_rol_display()}) - {self.sede.nombre if self.sede else 'Sin Sede'}"
-# Create your models here.
