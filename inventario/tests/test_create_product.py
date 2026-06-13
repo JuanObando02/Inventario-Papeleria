@@ -53,8 +53,8 @@ class CreateProductTests(TestCase):
             'precio_venta': 2000,
             'tipo': 'ANCHETA',
             'ingredientes': [
-                {'producto_hijo': p1.id, 'cantidad': 2},
-                {'producto_hijo': p2.id, 'cantidad': 1}
+                {'producto_hijo_id': p1.id, 'cantidad': 2},
+                {'producto_hijo_id': p2.id, 'cantidad': 1}
             ]
         }
         response = self.client.post(url, data, content_type='application/json')

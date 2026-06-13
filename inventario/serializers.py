@@ -79,6 +79,21 @@ class MovimientoInventarioSerializer(serializers.ModelSerializer):
 
         return data
 
+class MovimientoHistorialSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.ReadOnlyField(source='producto.nombre')
+    codigo_interno = serializers.ReadOnlyField(source='producto.codigo_interno')
+    sede_origen_nombre = serializers.ReadOnlyField(source='sede_origen.nombre')
+    sede_destino_nombre = serializers.ReadOnlyField(source='sede_destino.nombre')
+    usuario_nombre = serializers.ReadOnlyField(source='usuario.username')
+
+    class Meta:
+        model = MovimientoInventario
+        fields = [
+            'id', 'fecha', 'tipo', 'producto_nombre', 'codigo_interno',
+            'cantidad', 'sede_origen_nombre', 'sede_destino_nombre',
+            'usuario_nombre', 'motivo', 'costo_unitario'
+        ]
+
 class InventarioGlobalSerializer(serializers.ModelSerializer):
     
     producto_nombre = serializers.ReadOnlyField(source='producto.nombre')
@@ -102,6 +117,25 @@ class InventarioGlobalSerializer(serializers.ModelSerializer):
 
     def get_valor_total_venta(self, obj):
         return obj.stock_actual * obj.producto.precio_venta
+
+class AlertaStockSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.ReadOnlyField(source='producto.nombre')
+    codigo_interno = serializers.ReadOnlyField(source='producto.codigo_interno')
+    sede_id = serializers.ReadOnlyField(source='sede.id')
+    sede_nombre = serializers.ReadOnlyField(source='sede.nombre')
+
+    class Meta:
+        model = Inventario
+        fields = [
+            'id', 'producto_nombre', 'codigo_interno',
+            'sede_id', 'sede_nombre',
+            'stock_actual', 'stock_minimo', 'ubicacion'
+        ]
+
+class StockMinimoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Inventario
+        fields = ['id', 'stock_minimo']
 
 from .models import RecetaAncheta
 
@@ -169,5 +203,55 @@ class ProductoCreateSerializer(serializers.ModelSerializer):
                 ))
             if recetas:
                 RecetaAncheta.objects.bulk_create(recetas)
-        
+
         return producto
+
+class RecetaAdminSerializer(serializers.ModelSerializer):
+    """Lectura de ingredientes con costo, para el formulario de edición (Admin)."""
+    producto_hijo_id = serializers.ReadOnlyField(source='producto_hijo.id')
+    nombre = serializers.ReadOnlyField(source='producto_hijo.nombre')
+    precio_costo = serializers.ReadOnlyField(source='producto_hijo.precio_costo')
+
+    class Meta:
+        model = RecetaAncheta
+        fields = ['producto_hijo_id', 'nombre', 'precio_costo', 'cantidad']
+
+class ProductoUpdateSerializer(ProductoCreateSerializer):
+    ingredientes_detalle = RecetaAdminSerializer(source='ingredientes', many=True, read_only=True)
+
+    class Meta(ProductoCreateSerializer.Meta):
+        fields = ProductoCreateSerializer.Meta.fields + ['ingredientes_detalle']
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        ingredientes_data = validated_data.pop('ingredientes', None)
+        tipo = validated_data.get('tipo', instance.tipo)
+
+        if tipo == 'ANCHETA' and ingredientes_data is not None:
+            costo_calculado = 0
+            for item in ingredientes_data:
+                hijo = item['producto_hijo']
+                if hijo.id == instance.id:
+                    raise serializers.ValidationError("Un producto no puede ser componente de sí mismo.")
+                if hijo.tipo == 'ANCHETA':
+                    raise serializers.ValidationError("Una Ancheta no puede contener otra Ancheta.")
+                costo_calculado += (hijo.precio_costo * item.get('cantidad', 1))
+            validated_data['precio_costo'] = costo_calculado
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Reemplazar la receta completa si enviaron ingredientes
+        if ingredientes_data is not None and instance.tipo == 'ANCHETA':
+            instance.ingredientes.all().delete()
+            RecetaAncheta.objects.bulk_create([
+                RecetaAncheta(
+                    producto_padre=instance,
+                    producto_hijo=item['producto_hijo'],
+                    cantidad=item.get('cantidad', 1)
+                )
+                for item in ingredientes_data
+            ])
+
+        return instance

@@ -4,11 +4,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, generics
 from rest_framework.decorators import api_view, permission_classes
 from django.shortcuts import get_object_or_404
-from django.db.models import Q
+from django.db.models import Q, F
 from django.core.exceptions import ValidationError
 from .models import Producto, Sede
 from .serializers import ProductoPOSSerializer
 from .services import armar_ancheta
+
+def es_admin(usuario):
+    return hasattr(usuario, 'perfil') and usuario.perfil.rol == 'ADMIN'
 
 class ListarProductosPOS(generics.ListAPIView):
     serializer_class = ProductoPOSSerializer
@@ -297,6 +300,30 @@ class CrearProductoView(generics.CreateAPIView):
         except Exception as e:
              return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+from .serializers import ProductoUpdateSerializer
+
+class ProductoAdminDetailView(generics.RetrieveUpdateAPIView):
+    """
+    GET: detalle del producto con ingredientes (para precargar el formulario).
+    PATCH: edición de campos base, activo e ingredientes. Solo ADMIN.
+    """
+    queryset = Producto.objects.all()
+    serializer_class = ProductoUpdateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def retrieve(self, request, *args, **kwargs):
+        if not es_admin(request.user):
+            return Response({"error": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
+        return super().retrieve(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if not es_admin(request.user):
+            return Response({"error": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            return super().update(request, *args, **kwargs)
+        except ValidationError as e:
+            return Response({"error": e.messages}, status=status.HTTP_400_BAD_REQUEST)
+
 class GenerarSiguienteCodigoProductoView(APIView):
     """
     Genera el siguiente codigo interno disponible, partiendo de 1000.
@@ -321,3 +348,112 @@ class GenerarSiguienteCodigoProductoView(APIView):
         
         siguiente = max_codigo + 1
         return Response({"siguiente_codigo": str(siguiente)})
+
+from .serializers import AlertaStockSerializer, StockMinimoSerializer
+
+def alertas_stock_queryset(usuario, sede_id=None):
+    """
+    Inventarios de productos FISICOS activos con stock en o por debajo del mínimo.
+    ADMIN: todas las sedes (o filtra por sede_id). EMPLEADO: solo su sede.
+    """
+    queryset = Inventario.objects.filter(
+        producto__tipo='FISICO',
+        producto__activo=True,
+        stock_actual__lte=F('stock_minimo')
+    ).select_related('producto', 'sede')
+
+    if es_admin(usuario):
+        if sede_id:
+            queryset = queryset.filter(sede_id=sede_id)
+    elif hasattr(usuario, 'perfil') and usuario.perfil.sede:
+        queryset = queryset.filter(sede=usuario.perfil.sede)
+    else:
+        return Inventario.objects.none()
+
+    return queryset.order_by('sede__nombre', 'stock_actual', 'producto__nombre')
+
+from rest_framework.pagination import LimitOffsetPagination
+from .models import MovimientoInventario
+from .serializers import MovimientoHistorialSerializer
+from datetime import datetime
+
+class HistorialMovimientosPagination(LimitOffsetPagination):
+    default_limit = 25
+    max_limit = 100
+
+class HistorialMovimientosView(generics.ListAPIView):
+    """
+    Historial de movimientos de inventario con filtros (solo ADMIN).
+    Query params: ?q= (producto), ?sede_id= (origen o destino), ?tipo=, ?desde=, ?hasta=
+    """
+    serializer_class = MovimientoHistorialSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = HistorialMovimientosPagination
+
+    def get_queryset(self):
+        if not es_admin(self.request.user):
+            return MovimientoInventario.objects.none()
+
+        queryset = MovimientoInventario.objects.select_related(
+            'producto', 'sede_origen', 'sede_destino', 'usuario'
+        ).order_by('-fecha')
+
+        params = self.request.query_params
+
+        q = params.get('q', '').strip()
+        if q:
+            queryset = queryset.filter(
+                Q(producto__nombre__icontains=q) |
+                Q(producto__codigo_barras__icontains=q) |
+                Q(producto__codigo_interno__icontains=q)
+            )
+
+        sede_id = params.get('sede_id')
+        if sede_id:
+            queryset = queryset.filter(Q(sede_origen_id=sede_id) | Q(sede_destino_id=sede_id))
+
+        tipo = params.get('tipo')
+        if tipo:
+            queryset = queryset.filter(tipo=tipo)
+
+        desde = params.get('desde')
+        if desde:
+            try:
+                queryset = queryset.filter(fecha__date__gte=datetime.strptime(desde, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+
+        hasta = params.get('hasta')
+        if hasta:
+            try:
+                queryset = queryset.filter(fecha__date__lte=datetime.strptime(hasta, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+
+        return queryset
+
+class AlertasStockView(generics.ListAPIView):
+    """
+    Productos por reponer: stock_actual <= stock_minimo.
+    """
+    serializer_class = AlertaStockSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return alertas_stock_queryset(
+            self.request.user,
+            self.request.query_params.get('sede_id')
+        )
+
+class ActualizarStockMinimoView(generics.RetrieveUpdateAPIView):
+    """
+    Permite al ADMIN ajustar el stock mínimo de un inventario (producto+sede).
+    """
+    queryset = Inventario.objects.select_related('producto', 'sede')
+    serializer_class = StockMinimoSerializer
+    permission_classes = [IsAuthenticated]
+
+    def update(self, request, *args, **kwargs):
+        if not es_admin(request.user):
+            return Response({"error": "Solo los administradores pueden modificar el stock mínimo."}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
