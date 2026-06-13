@@ -35,3 +35,4 @@ media/
 # --- Sistema Operativo ---
 Thumbs.db
 .DS_Store
+scratch/crear_papeleria_remoto.py
