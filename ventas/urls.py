@@ -1,8 +1,9 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from .views import (
-    ProcesarVentaView, CerrarCajaView, punto_venta_view, LoginAPIView, 
-    AbrirCajaView, EstadoCajaView, AdminReportesCajaView, AdminDetalleCajaView
+    ProcesarVentaView, CerrarCajaView, punto_venta_view, LoginAPIView,
+    AbrirCajaView, EstadoCajaView, AdminReportesCajaView, AdminDetalleCajaView,
+    AnularVentaView, ReporteVentasView, DashboardResumenView
 )
 
 urlpatterns = [
@@ -12,13 +13,16 @@ urlpatterns = [
     path('login-json/', LoginAPIView.as_view(), name='login-api'),
     path('abrir-caja/', AbrirCajaView.as_view(), name='abrir-caja'),
     path('estado-caja/', EstadoCajaView.as_view(), name='estado-caja'),
+    path('dashboard/', DashboardResumenView.as_view(), name='dashboard-resumen'),
 
     # --- RUTAS DEL POS ---
     path('crear/', ProcesarVentaView.as_view(), name='crear-venta'),
     path('cerrar/<int:pk>/', CerrarCajaView.as_view(), name='cerrar-caja'),
+    path('anular/<int:pk>/', AnularVentaView.as_view(), name='anular-venta'),
     path('pos/', punto_venta_view, name='pantalla-pos'),
 
     # --- REPORTES ADMIN ---
     path('admin/reportes/cajas/', AdminReportesCajaView.as_view(), name='admin-reportes-cajas'),
     path('admin/reportes/cajas/<int:pk>/', AdminDetalleCajaView.as_view(), name='admin-detalle-caja'),
+    path('admin/reportes/ventas/', ReporteVentasView.as_view(), name='admin-reporte-ventas'),
 ]   

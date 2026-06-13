@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from inventario.models import Producto
 from .caja import SesionCaja
 
@@ -16,6 +17,14 @@ class Venta(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     metodo_pago = models.CharField(max_length=20, choices=METODOS_PAGO, default='EFECTIVO')
 
+    anulada = models.BooleanField(default=False)
+    motivo_anulacion = models.CharField(max_length=200, blank=True)
+    anulada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='ventas_anuladas'
+    )
+    fecha_anulacion = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         app_label = 'ventas'
 
@@ -29,6 +38,7 @@ class DetalleVenta(models.Model):
     cantidad = models.PositiveIntegerField()
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Costo del producto al momento de la venta")
     
     id_agrupador_kit = models.CharField(max_length=50, null=True, blank=True, help_text="UUID para agrupar items de una misma ancheta")
     porcentaje_comision = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text="Porcentaje de comisión/margen aplicado (especialmente para anchetas)")

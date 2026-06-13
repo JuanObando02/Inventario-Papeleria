@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 const AdminReports = () => {
     const { user } = useAuth();
@@ -9,6 +9,7 @@ const AdminReports = () => {
 
     const [sesiones, setSesiones] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [vista, setVista] = useState('cerradas'); // 'cerradas' | 'abiertas'
 
     // Estado para el Modal de Detalle
     const [selectedSesionId, setSelectedSesionId] = useState(null);
@@ -23,8 +24,11 @@ const AdminReports = () => {
         }
 
         const fetchSesiones = async () => {
+            setLoading(true);
             try {
-                const res = await api.get('ventas/admin/reportes/cajas/');
+                let url = 'ventas/admin/reportes/cajas/';
+                if (vista === 'abiertas') url += '?estado=abiertas';
+                const res = await api.get(url);
                 setSesiones(res.data);
             } catch (error) {
                 console.error("Error cargando reportes", error);
@@ -33,7 +37,7 @@ const AdminReports = () => {
             }
         };
         fetchSesiones();
-    }, [user, navigate]);
+    }, [user, navigate, vista]);
 
     // 2. Cargar Detalle de una sesión
     const verDetalle = async (id) => {
@@ -55,6 +59,21 @@ const AdminReports = () => {
         setDetalle(null);
     };
 
+    const anularVenta = async (ventaId) => {
+        const motivo = prompt("Motivo de la anulación de la venta #" + ventaId + ":");
+        if (!motivo || !motivo.trim()) return;
+
+        try {
+            await api.post(`ventas/anular/${ventaId}/`, { motivo: motivo.trim() });
+            alert("Venta anulada correctamente. El stock fue devuelto.");
+            // Recargar el detalle para reflejar la anulación
+            verDetalle(selectedSesionId);
+        } catch (error) {
+            console.error(error);
+            alert(error.response?.data?.error || "No se pudo anular la venta.");
+        }
+    };
+
     // --- RENDERIZADO ---
     if (loading) return <div className="text-center mt-5"><div className="spinner-border"></div></div>;
 
@@ -65,6 +84,22 @@ const AdminReports = () => {
                 <button className="btn btn-secondary" onClick={() => navigate('/menu')}>Volver al Menú</button>
             </div>
 
+            {/* TOGGLE CERRADAS / ABIERTAS */}
+            <div className="btn-group mb-3">
+                <button
+                    className={`btn ${vista === 'cerradas' ? 'btn-primary' : 'btn-outline-primary'}`}
+                    onClick={() => setVista('cerradas')}
+                >
+                    Cajas Cerradas
+                </button>
+                <button
+                    className={`btn ${vista === 'abiertas' ? 'btn-primary' : 'btn-outline-primary'}`}
+                    onClick={() => setVista('abiertas')}
+                >
+                    Cajas Abiertas
+                </button>
+            </div>
+
             <div className="card shadow-sm">
                 <div className="card-body p-0">
                     <div className="table-responsive">
@@ -72,7 +107,7 @@ const AdminReports = () => {
                             <thead className="table-light">
                                 <tr>
                                     <th>ID</th>
-                                    <th>Fecha Cierre</th>
+                                    <th>{vista === 'abiertas' ? 'Fecha Apertura' : 'Fecha Cierre'}</th>
                                     <th>Usuario</th>
                                     <th>Sede</th>
                                     <th className="text-end">Diferencia</th>
@@ -82,13 +117,15 @@ const AdminReports = () => {
                             <tbody>
                                 {sesiones.length === 0 ? (
                                     <tr>
-                                        <td colSpan="6" className="text-center py-4">No hay cierres registrados.</td>
+                                        <td colSpan="6" className="text-center py-4">
+                                            {vista === 'abiertas' ? 'No hay cajas abiertas en este momento.' : 'No hay cierres registrados.'}
+                                        </td>
                                     </tr>
                                 ) : (
                                     sesiones.map(s => {
                                         const dif = parseFloat(s.diferencia);
                                         const color = dif === 0 ? 'text-primary' : (dif < 0 ? 'text-danger' : 'text-success');
-                                        const fecha = new Date(s.fecha_cierre).toLocaleString();
+                                        const fecha = new Date(vista === 'abiertas' ? s.fecha_apertura : s.fecha_cierre).toLocaleString();
 
                                         return (
                                             <tr key={s.id}>
@@ -97,7 +134,11 @@ const AdminReports = () => {
                                                 <td>{s.usuario_nombre}</td>
                                                 <td><span className="badge bg-info text-dark">{s.sede_nombre}</span></td>
                                                 <td className={`text-end fw-bold ${color}`}>
-                                                    ${dif.toLocaleString()}
+                                                    {vista === 'abiertas' ? (
+                                                        <span className="badge bg-success">EN CURSO</span>
+                                                    ) : (
+                                                        `$${dif.toLocaleString()}`
+                                                    )}
                                                 </td>
                                                 <td className="text-center">
                                                     <button
@@ -153,11 +194,11 @@ const AdminReports = () => {
                                                     </li>
                                                     <li className="list-group-item d-flex justify-content-between">
                                                         <span>Dinero Reportado:</span>
-                                                        <strong>${parseFloat(detalle.dinero_fisico_declarado).toLocaleString()}</strong>
+                                                        <strong>${parseFloat(detalle.dinero_fisico_declarado || 0).toLocaleString()}</strong>
                                                     </li>
-                                                    <li className={`list-group-item d-flex justify-content-between fw-bold text-white ${parseFloat(detalle.diferencia) < 0 ? 'bg-danger' : (parseFloat(detalle.diferencia) > 0 ? 'bg-success' : 'bg-info')}`}>
+                                                    <li className={`list-group-item d-flex justify-content-between fw-bold text-white ${parseFloat(detalle.diferencia || 0) < 0 ? 'bg-danger' : (parseFloat(detalle.diferencia || 0) > 0 ? 'bg-success' : 'bg-info')}`}>
                                                         <span>Diferencia:</span>
-                                                        <span>${parseFloat(detalle.diferencia).toLocaleString()}</span>
+                                                        <span>${parseFloat(detalle.diferencia || 0).toLocaleString()}</span>
                                                     </li>
                                                 </ul>
                                             </div>
@@ -177,13 +218,19 @@ const AdminReports = () => {
                                                                 <th>Método</th>
                                                                 <th>Productos</th>
                                                                 <th className="text-end">Total</th>
+                                                                {detalle.activa && <th className="text-center">Acción</th>}
                                                             </tr>
                                                         </thead>
                                                         <tbody>
                                                             {detalle.ventas.map(v => (
-                                                                <tr key={v.id}>
+                                                                <tr key={v.id} className={v.anulada ? 'table-danger' : ''} style={v.anulada ? { textDecoration: 'line-through', opacity: 0.6 } : {}}>
                                                                     <td>{v.hora}</td>
-                                                                    <td><span className="badge bg-secondary">{v.metodo_pago}</span></td>
+                                                                    <td>
+                                                                        <span className="badge bg-secondary">{v.metodo_pago}</span>
+                                                                        {v.anulada && (
+                                                                            <span className="badge bg-danger ms-1" title={v.motivo_anulacion}>ANULADA</span>
+                                                                        )}
+                                                                    </td>
                                                                     <td>
                                                                         <ul className="list-unstyled mb-0 small">
                                                                             {v.detalles.map((d, idx) => (
@@ -196,6 +243,19 @@ const AdminReports = () => {
                                                                     <td className="text-end fw-bold align-middle">
                                                                         ${parseFloat(v.total).toLocaleString()}
                                                                     </td>
+                                                                    {detalle.activa && (
+                                                                        <td className="text-center align-middle">
+                                                                            {!v.anulada && (
+                                                                                <button
+                                                                                    className="btn btn-sm btn-outline-danger"
+                                                                                    style={{ textDecoration: 'none' }}
+                                                                                    onClick={() => anularVenta(v.id)}
+                                                                                >
+                                                                                    Anular
+                                                                                </button>
+                                                                            )}
+                                                                        </td>
+                                                                    )}
                                                                 </tr>
                                                             ))}
                                                         </tbody>

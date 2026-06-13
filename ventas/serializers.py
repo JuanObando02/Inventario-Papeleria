@@ -83,6 +83,7 @@ class CrearVentaSerializer(serializers.ModelSerializer):
                     cantidad=cantidad_items,
                     precio_unitario=precio_item,
                     subtotal=cantidad_items * precio_item,
+                    costo_unitario=producto.precio_costo,
                     id_agrupador_kit=kit_uuid,
                     porcentaje_comision=item.get('porcentaje_comision', 0)
                 )
@@ -115,7 +116,7 @@ class CerrarCajaSerializer(serializers.ModelSerializer):
         
         # 1. Calcular cuánto debería haber (Base + Ventas en Efectivo)
         # Nota: Solo sumamos efectivo. Las transferencias no suman al cajón de monedas.
-        ventas_efectivo = instance.ventas.filter(metodo_pago='EFECTIVO').aggregate(
+        ventas_efectivo = instance.ventas.filter(metodo_pago='EFECTIVO', anulada=False).aggregate(
             total=models.Sum('total')
         )['total'] or 0
         
@@ -150,7 +151,7 @@ class VentaReporteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Venta
-        fields = ['id', 'hora', 'metodo_pago', 'total', 'detalles']
+        fields = ['id', 'hora', 'metodo_pago', 'total', 'detalles', 'anulada', 'motivo_anulacion']
 
     def get_hora(self, obj):
         return obj.fecha.strftime("%H:%M")
