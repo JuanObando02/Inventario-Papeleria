@@ -111,3 +111,7 @@ docker run -p 8000:8000 -e DATABASE_URL=postgres://... inventario-papeleria
 ```
 
 Variables de entorno relevantes: `DATABASE_URL` (activa PostgreSQL), `ALLOWED_HOSTS`, `SECRET_KEY`. Los archivos estáticos se sirven con WhiteNoise.
+
+## Licencia
+
+Software propietario — **todos los derechos reservados**. El código se publica como *source-available*: puede consultarse, pero no está permitido usarlo, copiarlo, modificarlo ni distribuirlo sin autorización previa y por escrito del titular. Ver [LICENSE](LICENSE).
