@@ -35,4 +35,9 @@ media/
 # --- Sistema Operativo ---
 Thumbs.db
 .DS_Store
-scratch/crear_papeleria_remoto.py
+
+# --- Archivos de trabajo / scratch (no van al repo) ---
+scratch/
+
+# --- Configuracion local de Claude Code ---
+.claude/

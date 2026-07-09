@@ -148,7 +148,7 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
-print(f"VALOR DEL ENV: {os.getenv('PROBANDO_ENV')}") 
+print(f"VALOR DEL ENV: {os.getenv('PROBANDO_ENV')}")
  
  
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
