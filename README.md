@@ -93,6 +93,15 @@ Documentación interactiva:
 
 Panel de administración de Django: `/admin/`
 
+## Capturas
+
+| | |
+|---|---|
+| **Login** ![Login](docs/images/Login.png) | **Home** ![Home](docs/images/Home.png) |
+| **Panel de inventario** ![Panel de inventario](docs/images/Panel-inventario.png) | **Crear productos** ![Crear productos](docs/images/Crear-Productos.png) |
+| **Registro de movimiento** ![Registro de movimiento](docs/images/Registro-Movimiento.png) | **POS / Caja** ![POS Caja](docs/images/POS-Caja.png) |
+| **Cierre de caja** ![Cierre de caja](docs/images/Cierre-Caja.png) | **Panel de administración Django** ![Panel Admin Django](docs/images/Panel-Admin-Django.png) |
+
 ## Pruebas
 
 ```bash
