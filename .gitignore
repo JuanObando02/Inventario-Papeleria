@@ -35,3 +35,9 @@ media/
 # --- Sistema Operativo ---
 Thumbs.db
 .DS_Store
+
+# --- Archivos de trabajo / scratch (no van al repo) ---
+scratch/
+
+# --- Configuracion local de Claude Code ---
+.claude/
